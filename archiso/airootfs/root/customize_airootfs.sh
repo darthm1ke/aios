@@ -15,28 +15,37 @@ else
 fi
 
 # No llama-cpp-python — Ollama handles local inference with automatic
-# GPU detection (CUDA, ROCm, CPU). Pre-compiled, no chroot build issues.
-
-# TinyLlama is pulled on first boot by the daemon (ensure_ollama_model).
-# Chroot has no network access so pulling here always fails silently.
+# GPU detection (Vulkan, CPU). Pre-compiled, no chroot build issues.
+#
+# The qwen2.5:0.5b model store is baked into /var/lib/ollama at build time
+# (fetch-deps.sh pulls it on the build host and copies the blob store in), so
+# the live system needs ZERO network to run the AI.
 
 # ── Enable core services ──────────────────────────────────────────────────────
 systemctl enable ollama.service 2>/dev/null || systemctl enable ollama-vulkan.service 2>/dev/null || true
-systemctl enable aios-mount-data.service
-systemctl enable aios-model-init.service
+systemctl enable aios-model-init.service     # offline warmup — no network, no pull
 systemctl enable archspeech.service
-# archspeech-voice.service disabled — uses piper/whisper-cli which aren't installed
-# Voice is handled by archspeech-ptt (evdev + espeak-ng)
-# systemctl enable archspeech-voice.service
-systemctl enable archspeech-ptt.service
+systemctl enable archspeech-ptt.service       # Caps Lock push-to-talk (evdev + espeak-ng)
 systemctl enable keyd.service
 systemctl enable NetworkManager.service
 
+# ── Offline-first: never block boot waiting for a network ─────────────────────
+# On a machine with no internet, network-online.target would otherwise stall
+# boot until systemd-networkd-wait-online times out — delaying the AI by up to
+# two minutes. We don't need synchronous network for the local model, so mask
+# the wait. Cloud backends still work: the daemon connects lazily once NM is up.
+systemctl mask systemd-networkd-wait-online.service 2>/dev/null || true
+
+# ── Bake-in Ollama model store ownership ──────────────────────────────────────
+# The qwen2.5:0.5b store is copied into /var/lib/ollama at build time (see
+# fetch-deps.sh). Make sure the ollama service user can read it.
+if [ -d /var/lib/ollama ]; then
+    chown -R ollama:ollama /var/lib/ollama 2>/dev/null || true
+    chmod -R u+rwX,go+rX /var/lib/ollama 2>/dev/null || true
+fi
+
 # ── File permissions ──────────────────────────────────────────────────────────
 chmod 440 /etc/sudoers.d/archspeech
-# Make GGUF readable by the ollama system user
-chmod 644 /usr/local/lib/archspeech/models/qwen3-0.6b.gguf 2>/dev/null || true
-chmod 755 /usr/local/lib/archspeech/models/ 2>/dev/null || true
 chmod +x /usr/local/lib/archspeech/installer/profiles/*.sh
 chmod +x /usr/local/lib/archspeech/installer/log.sh
 

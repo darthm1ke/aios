@@ -295,38 +295,49 @@ def load_cheatsheet(message: str) -> str:
     return context
 
 
-def ensure_ollama_model(model: str = "qwen3:0.6b") -> bool:
-    """Pull the model if Ollama is running but doesn't have it yet."""
-    try:
-        result = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=5)
-        if model in result.stdout:
-            return True
-        log.info(f"Pulling {model} via Ollama (first boot download)...")
-        subprocess.run(["ollama", "pull", model], timeout=300)
-        log.info(f"{model} ready.")
-        return True
-    except Exception as e:
-        log.error(f"Ollama model setup failed: {e}")
-        return False
+# The 0.5B model isn't smart enough to know Arch commands on its own, so we give
+# it EVERY cheat sheet in its system prompt on EVERY request. All sheets total
+# ~1.2K tokens, which fits comfortably in the 4096-token context window. Built
+# once at startup and cached so we don't re-read the files per request.
+_ALL_CHEATSHEETS_CACHE: str | None = None
+
+
+def all_cheatsheets() -> str:
+    global _ALL_CHEATSHEETS_CACHE
+    if _ALL_CHEATSHEETS_CACHE is None:
+        parts = []
+        if CHEATSHEET_DIR.is_dir():
+            for path in sorted(CHEATSHEET_DIR.glob("*.md")):
+                parts.append(path.read_text().strip())
+        _ALL_CHEATSHEETS_CACHE = "\n\n".join(parts)
+    return _ALL_CHEATSHEETS_CACHE
+
+
+LOCAL_MODEL = "qwen2.5:0.5b"
 
 
 async def handle_local(user_message: str) -> str:
-    """Use Ollama native /api/chat with minimal prompt for fast 0.6B inference."""
-    ensure_ollama_model("qwen2.5:0.5b")
+    """Use Ollama native /api/chat with minimal prompt for fast inference.
+
+    The model is baked into the ISO at /var/lib/ollama — there is NO pull and
+    NO network access here. If the model is somehow absent we fail gracefully
+    rather than blocking the user with a download that can't happen offline.
+    """
     import urllib.request as _ur, json as _json
 
-    # Only inject cheat sheet for complex Arch-specific queries, not casual conversation
-    context = load_cheatsheet(user_message) if len(user_message.split()) > 3 else ""
+    # Always give the model the full command reference — it can't recall Arch
+    # commands reliably on its own at 0.5B, so the cheat sheets ARE its knowledge.
+    system_content = LOCAL_SYSTEM_PROMPT + "\n\n=== COMMAND REFERENCE (use these exact commands) ===\n" + all_cheatsheets()
 
     payload = _json.dumps({
-        "model":   "qwen2.5:0.5b",
+        "model":   LOCAL_MODEL,
         "messages": [
-            {"role": "system", "content": LOCAL_SYSTEM_PROMPT},
-            {"role": "user",   "content": user_message + context}
+            {"role": "system", "content": system_content},
+            {"role": "user",   "content": user_message}
         ],
         "stream":  False,
         "options": {
-            "num_ctx":     2048,   # Half of before — 0.6B doesn't need 4096
+            "num_ctx":     4096,   # room for all cheat sheets (~1.2K tok) + reply
             "temperature": 0.7,
             "num_predict": 256     # Cap output length — keeps responses fast and concise
         }
@@ -357,14 +368,14 @@ async def handle_request(user_message: str, config: dict) -> str:
         try:
             return await handle_anthropic(user_message, config)
         except Exception as e:
-            log.warning(f"Anthropic failed ({e}), falling back to TinyLlama")
+            log.warning(f"Anthropic failed ({e}), falling back to local model")
             return await handle_local(user_message)
 
     elif provider in ("openai", "openai_compatible"):
         try:
             return await handle_openai_compatible(user_message, config)
         except Exception as e:
-            log.warning(f"OpenAI-compatible failed ({e}), falling back to TinyLlama")
+            log.warning(f"OpenAI-compatible failed ({e}), falling back to local model")
             return await handle_local(user_message)
 
     else:

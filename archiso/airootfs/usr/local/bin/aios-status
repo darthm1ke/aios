@@ -18,7 +18,6 @@ exec journalctl -f \
     -u aios-model-init.service \
     -u archspeech.service \
     -u archspeech-ptt.service \
-    -u archspeech-voice.service \
     -u NetworkManager.service \
     --no-hostname \
     --output=short-monotonic \

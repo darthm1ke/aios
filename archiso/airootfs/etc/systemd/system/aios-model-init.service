@@ -1,25 +1,27 @@
 [Unit]
-Description=AIos - Ensure Qwen2.5 0.5B is available in Ollama
-After=network.target
-ConditionPathExists=!/var/lib/aios/.model_ready
+Description=AIos - Warm up the local model (offline, no network)
+# The model store is baked into the ISO at /var/lib/ollama, so there is nothing
+# to download. We just wait for the local Ollama API and fire one tiny request
+# to load qwen2.5:0.5b into RAM, so the very first voice command is instant.
+After=ollama.service
+Wants=ollama.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-# Wait for Ollama API, then pull or verify model
 ExecStart=/bin/bash -c '\
-    echo "Waiting for Ollama..."; \
-    until curl -sf http://localhost:11434/api/version > /dev/null 2>&1; do sleep 1; done; \
-    echo "Ollama ready"; \
-    if ollama list | grep -q "qwen2.5:0.5b"; then \
-        echo "Model already available"; \
-    else \
-        echo "Pulling qwen2.5:0.5b from registry..."; \
-        ollama pull qwen2.5:0.5b; \
-    fi; \
+    echo "Waiting for local Ollama..."; \
+    for i in $(seq 1 60); do \
+        curl -sf http://localhost:11434/api/version >/dev/null 2>&1 && break; \
+        sleep 1; \
+    done; \
+    echo "Preloading qwen2.5:0.5b into memory..."; \
+    curl -sf http://localhost:11434/api/generate \
+        -d "{\\"model\\":\\"qwen2.5:0.5b\\",\\"prompt\\":\\"\\",\\"keep_alive\\":-1}" \
+        >/dev/null 2>&1 || echo "warmup skipped (model loads on first use)"; \
     mkdir -p /var/lib/aios && touch /var/lib/aios/.model_ready; \
-    echo "READY: qwen2.5:0.5b loaded"'
-TimeoutStartSec=600
+    echo "READY: local AI warm"'
+TimeoutStartSec=120
 StandardOutput=journal
 StandardError=journal
 

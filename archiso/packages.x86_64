@@ -69,7 +69,14 @@ pciutils
 usbutils
 
 # --- Audio (voice module) ---
+# sof-firmware + alsa-ucm-conf are CRITICAL: every Intel laptop from ~2019 on
+# (the exact machines normies install on) needs Sound Open Firmware + UCM
+# profiles or the INTERNAL MIC is never detected. linux-firmware alone is not
+# enough. alsa-firmware covers older Creative/emu cards.
 alsa-utils
+alsa-ucm-conf
+alsa-firmware
+sof-firmware
 pipewire
 pipewire-alsa
 pipewire-pulse

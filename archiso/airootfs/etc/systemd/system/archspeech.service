@@ -1,7 +1,11 @@
 [Unit]
 Description=ArchSpeech AI Daemon
-After=network-online.target
-Wants=network-online.target
+# NO network dependency — the local model needs nothing from the internet.
+# Waiting on network-online here is what stalled boot on offline machines.
+# We order after ollama so the first request has a backend, but we do NOT
+# require it: the socket must come up ASAP so the UI never blocks.
+After=ollama.service
+Wants=ollama.service
 
 [Service]
 Type=simple

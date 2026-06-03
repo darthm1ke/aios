@@ -14,9 +14,9 @@ if ! command -v mkarchiso &>/dev/null; then
     exit 1
 fi
 
-MODEL="$PROFILE/airootfs/usr/local/lib/archspeech/models/qwen3-0.6b.gguf"
-if [ ! -f "$MODEL" ]; then
-    echo "✗ Qwen3 0.6B model not found."
+MODEL_STORE="$PROFILE/airootfs/var/lib/ollama/manifests/registry.ollama.ai/library/qwen2.5"
+if ! sudo test -d "$MODEL_STORE"; then
+    echo "✗ Baked Ollama model store not found ($MODEL_STORE)."
     echo "  Run:  bash $PROJECT/scripts/fetch-deps.sh"
     exit 1
 fi
@@ -37,7 +37,7 @@ mkdir -p "$OUT"
 # ── Build ─────────────────────────────────────────────────────────────────────
 echo "▶ Building AIos ISO..."
 echo "  Packages cached in:  $PROJECT/pkg-cache/"
-echo "  Model:               $(du -sh "$MODEL" | cut -f1) — Qwen3 0.6B"
+echo "  Model:               qwen2.5:0.5b (baked into Ollama store)"
 echo ""
 
 sudo mkarchiso -v -w "$WORK" -o "$OUT" "$PROFILE"
