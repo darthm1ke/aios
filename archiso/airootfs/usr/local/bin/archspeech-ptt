@@ -1,202 +1,182 @@
 #!/opt/archspeech/bin/python3
 """
 ArchSpeech Push-to-Talk daemon
-Hold Caps Lock  → mic opens (LED lights up = you're live)  [bare metal]
-Hold Right Ctrl → mic opens (QEMU / VM fallback)
-Release         → AI thinks and responds
+Hold Caps Lock (keyd remaps it to F13)  → mic opens, you speak
+Hold Right Ctrl                          → same, VM/QEMU fallback
+Release                                  → transcribe, send text to the UI
 
-Works at evdev level: TTY, X11, Wayland — anywhere, always.
+Why this version finally works:
+  * keyd used to map Caps Lock to `noop`, so this daemon never saw the key.
+    keyd now maps it to F13, which we watch here.
+  * Audio is captured from the RAW hardware device (plughw:card,dev), NOT the
+    ALSA `default` — as root there is no PipeWire session, and pipewire-alsa
+    makes `default` capture silence. plughw goes straight to the sound card.
+  * Whisper is loaded ONCE and kept resident, so each utterance is fast.
 """
 
-import asyncio
-import subprocess
-import tempfile
-import os
-import sys
-import logging
+import asyncio, subprocess, tempfile, os, sys, logging, re, wave, struct
 from pathlib import Path
 
 import evdev
 from evdev import InputDevice, ecodes
 
-SOCKET_PATH  = "/run/archspeech/daemon.sock"
-VOICE_FIFO   = "/run/archspeech/voice_input"
-LOG_PATH     = Path("/var/log/archspeech/ptt.log")
+VOICE_FIFO    = "/run/archspeech/voice_input"
+LOG_PATH      = Path("/var/log/archspeech/ptt.log")
+STATUS_PATH   = Path("/run/archspeech/ptt_status")     # human-readable state for aios-status
+WHISPER_CACHE = "/root/.cache/whisper"                  # base.pt baked into the ISO
 WHISPER_SIZE  = "base"
-WHISPER_CACHE = "/root/.cache/whisper"   # pre-staged in ISO, no internet needed
+SILENCE_RMS   = 120     # below this = effectively silence (mic muted / wrong device)
 
-logging.basicConfig(
-    filename=str(LOG_PATH),
-    level=logging.INFO,
-    format="%(asctime)s [PTT] %(message)s"
-)
+LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+logging.basicConfig(filename=str(LOG_PATH), level=logging.INFO,
+                    format="%(asctime)s [PTT] %(message)s")
 log = logging.getLogger("archspeech.ptt")
 
+def status(msg):
+    log.info(msg)
+    try:
+        STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        STATUS_PATH.write_text(msg)
+    except Exception:
+        pass
+    print(f"[PTT] {msg}", flush=True)
 
-# ── Audio ─────────────────────────────────────────────────────────────────────
+# ── Audio device (bypass PipeWire default) ──────────────────────────────────
+def capture_device():
+    """Return 'plughw:card,dev' for the first ALSA capture device, else 'default'."""
+    try:
+        out = subprocess.run(["arecord", "-l"], capture_output=True, text=True, timeout=5).stdout
+        m = re.search(r"card (\d+):.*?device (\d+):", out)
+        if m:
+            return f"plughw:{m.group(1)},{m.group(2)}", m.group(1)
+    except Exception as e:
+        log.error(f"arecord -l failed: {e}")
+    return "default", "0"
 
-def start_recording(wav_path: str) -> subprocess.Popen:
+def unmute(card):
+    """Best-effort: enable capture and raise the mic gain so we don't record silence."""
+    for ctl in ("Capture", "Mic", "Internal Mic", "Mic Boost", "Master"):
+        subprocess.run(["amixer", "-c", card, "sset", ctl, "cap"],
+                       capture_output=True)
+        subprocess.run(["amixer", "-c", card, "sset", ctl, "80%", "unmute"],
+                       capture_output=True)
+
+DEVICE, CARD = capture_device()
+
+def start_recording(wav_path):
     return subprocess.Popen(
-        ["arecord", "-f", "S16_LE", "-r", "16000", "-c", "1", wav_path],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
+        ["arecord", "-D", DEVICE, "-f", "S16_LE", "-r", "16000", "-c", "1", wav_path],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-def stop_recording(proc: subprocess.Popen):
+def stop_recording(proc):
     proc.terminate()
-    proc.wait()
+    try: proc.wait(timeout=2)
+    except Exception: proc.kill()
 
-
-# ── Transcription ─────────────────────────────────────────────────────────────
-
-def transcribe(wav_path: str) -> str:
-    """Run whisper on the recorded WAV and return the transcript."""
-    out_dir = Path(wav_path).parent
+def wav_rms(path):
+    """Peak-ish RMS of a WAV — used to detect a dead/silent mic."""
     try:
-        subprocess.run(
-            [
-                "whisper", wav_path,
-                "--model", WHISPER_SIZE,
-                "--download-root", WHISPER_CACHE,
-                "--output_format", "txt",
-                "--output_dir", str(out_dir),
-                "--fp16", "False",
-                "--language", "en"
-            ],
-            capture_output=True, text=True, timeout=60
-        )
-        txt = out_dir / (Path(wav_path).stem + ".txt")
-        if txt.exists():
-            text = txt.read_text().strip()
-            txt.unlink()
-            return text
-    except Exception as e:
-        log.error(f"Transcription error: {e}")
-    return ""
+        with wave.open(path, "rb") as w:
+            frames = w.readframes(w.getnframes())
+        n = len(frames) // 2
+        if n == 0: return 0
+        samples = struct.unpack(f"{n}h", frames[:n*2])
+        return int((sum(s*s for s in samples) / n) ** 0.5)
+    except Exception:
+        return 0
 
-
-# ── TTS ───────────────────────────────────────────────────────────────────────
-
-def speak(text: str):
-    """Speak text via espeak-ng — works in TTY and GUI with no model files."""
-    subprocess.Popen(
-        ["espeak-ng", "-s", "160", "-p", "50", text],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-
-def beep(freq: int, duration_ms: int):
-    """Short audio cue using speaker-test or beep fallback."""
-    subprocess.Popen(
-        ["speaker-test", "-t", "sine", "-f", str(freq),
-         "-l", "1", "-P", str(duration_ms)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-
-
-# ── AI daemon ─────────────────────────────────────────────────────────────────
-
-async def send_to_daemon(message: str) -> str:
+# ── Whisper (loaded once, resident) ─────────────────────────────────────────
+_WHISPER = None
+def load_whisper():
+    global _WHISPER
     try:
-        reader, writer = await asyncio.open_unix_connection(SOCKET_PATH)
-        writer.write(message.encode())
-        writer.write_eof()
-        await writer.drain()
-        response = await reader.read(65536)
-        writer.close()
-        return response.decode().strip()
+        import whisper
+        status(f"Loading Whisper '{WHISPER_SIZE}' (offline)...")
+        _WHISPER = whisper.load_model(WHISPER_SIZE, download_root=WHISPER_CACHE)
+        status("Whisper ready")
     except Exception as e:
-        log.error(f"Daemon comms error: {e}")
-        return "Sorry, I couldn't reach the AI daemon. Is archspeech.service running?"
+        status(f"Whisper load FAILED: {e}")
+        _WHISPER = None
 
+def transcribe(wav_path):
+    if _WHISPER is None:
+        return ""
+    try:
+        r = _WHISPER.transcribe(wav_path, fp16=False, language="en")
+        return (r.get("text") or "").strip()
+    except Exception as e:
+        log.error(f"transcribe error: {e}")
+        return ""
 
-# ── Keyboard scanning ─────────────────────────────────────────────────────────
+# ── Feedback cues ────────────────────────────────────────────────────────────
+def beep(freq, ms):
+    subprocess.Popen(["speaker-test", "-t", "sine", "-f", str(freq), "-l", "1", "-P", str(ms)],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-# PTT keys: Caps Lock (bare metal, LED feedback) + Right Ctrl (VM fallback)
-PTT_KEYS = {ecodes.KEY_CAPSLOCK, ecodes.KEY_RIGHTCTRL}
+def to_ui(text):
+    """Push the transcript to the dashboard, which submits it to the AI."""
+    try:
+        if not os.path.exists(VOICE_FIFO):
+            os.mkfifo(VOICE_FIFO)
+        # non-blocking open so we don't hang if nothing is reading
+        fd = os.open(VOICE_FIFO, os.O_WRONLY | os.O_NONBLOCK)
+        os.write(fd, (text + "\n").encode())
+        os.close(fd)
+    except Exception as e:
+        log.error(f"FIFO write failed (is the dashboard running?): {e}")
 
+# ── Keyboard watch ───────────────────────────────────────────────────────────
+PTT_KEYS = {ecodes.KEY_F13, ecodes.KEY_RIGHTCTRL}   # F13 = keyd-remapped Caps Lock
 
-def find_keyboards() -> list[InputDevice]:
-    """Find all input devices that have at least one PTT key."""
-    keyboards = []
+def find_keyboards():
+    kbs = []
     for path in evdev.list_devices():
         try:
             dev = InputDevice(path)
-            caps = dev.capabilities()
-            keys = caps.get(ecodes.EV_KEY, [])
+            keys = dev.capabilities().get(ecodes.EV_KEY, [])
             if any(k in keys for k in PTT_KEYS):
-                keyboards.append(dev)
+                kbs.append(dev)
                 log.info(f"Watching: {dev.name} ({path})")
         except Exception:
             pass
-    return keyboards
+    return kbs
 
-
-# ── Main PTT loop ─────────────────────────────────────────────────────────────
-
-async def watch_keyboard(keyboard: InputDevice):
-    recording_proc = None
-    wav_path = None
-
-    async for event in keyboard.async_read_loop():
-        if event.type != ecodes.EV_KEY or event.code not in PTT_KEYS:
+async def watch(kbd):
+    proc = None; wav = None
+    async for ev in kbd.async_read_loop():
+        if ev.type != ecodes.EV_KEY or ev.code not in PTT_KEYS:
             continue
-
-        key_name = "Caps Lock" if event.code == ecodes.KEY_CAPSLOCK else "Right Ctrl"
-
-        if event.value == 1 and recording_proc is None:
-            # ── PTT key DOWN — open mic ────────────────────────────────────
-            log.info(f"Mic open ({key_name})")
-            wav_path = tempfile.mktemp(suffix=".wav", dir="/tmp")
-            recording_proc = start_recording(wav_path)
-            beep(880, 80)
-
-        elif event.value == 0 and recording_proc is not None:
-            # ── PTT key UP — close mic, process ───────────────────────────
-            log.info("Mic closed, processing...")
-            stop_recording(recording_proc)
-            recording_proc = None
-
-            # Low beep = done listening
-            beep(440, 80)
-
-            transcript = transcribe(wav_path)
-            Path(wav_path).unlink(missing_ok=True)
-            wav_path = None
-
-            if not transcript:
-                speak("I didn't catch that. Hold Caps Lock and try again.")
-                log.info("Empty transcript")
+        if ev.value == 1 and proc is None:          # key down — open mic
+            status("listening...")
+            wav = tempfile.mktemp(suffix=".wav", dir="/tmp")
+            proc = start_recording(wav); beep(880, 80)
+        elif ev.value == 0 and proc is not None:     # key up — transcribe
+            stop_recording(proc); proc = None; beep(440, 80)
+            level = wav_rms(wav)
+            if level < SILENCE_RMS:
+                status(f"heard only silence (level {level}) — mic muted or wrong device?")
+                Path(wav).unlink(missing_ok=True); wav = None
                 continue
-
-            log.info(f"Heard: {transcript}")
-
-            # Write to voice FIFO so the installer can read it as typed input
-            try:
-                with open(VOICE_FIFO, "w") as f:
-                    f.write(transcript + "\n")
-            except Exception:
-                pass
-
-            speak("On it.")
-            response = await send_to_daemon(transcript)
-            log.info(f"Response: {response[:100]}")
-            speak(response)
-
+            status(f"transcribing (level {level})...")
+            text = transcribe(wav)
+            Path(wav).unlink(missing_ok=True); wav = None
+            if not text:
+                status("transcription empty"); continue
+            status(f"heard: {text}")
+            to_ui(text)
 
 async def main():
-    keyboards = find_keyboards()
-    if not keyboards:
-        log.error("No keyboards found with Caps Lock key.")
-        sys.exit(1)
-
-    log.info(f"ArchSpeech PTT active on {len(keyboards)} keyboard(s). Hold Caps Lock to talk.")
-    speak("Push to talk ready. Hold Caps Lock to give a command.")
-
-    # Watch all keyboards concurrently
-    await asyncio.gather(*[watch_keyboard(kb) for kb in keyboards])
-
+    status(f"capture device: {DEVICE} (card {CARD})")
+    unmute(CARD)
+    load_whisper()
+    kbs = find_keyboards()
+    if not kbs:
+        status("No PTT-capable keyboard found (F13/Right Ctrl). keyd running?")
+        # keep the service alive so its status is visible rather than crash-looping
+        while True:
+            await asyncio.sleep(5)
+    status(f"ready — hold Caps Lock (or Right Ctrl) to talk. Watching {len(kbs)} device(s).")
+    await asyncio.gather(*[watch(k) for k in kbs])
 
 if __name__ == "__main__":
     asyncio.run(main())

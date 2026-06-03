@@ -159,28 +159,39 @@ def hw_thread():
         except Exception: pass
         time.sleep(1)
 
-def mic_thread():
-    """Continuously read mic level — suppress ALL stderr to avoid ALSA spam."""
+def capture_device():
+    """First ALSA capture device as plughw:card,dev — bypasses the pipewire
+    'default', which captures silence when running as root with no session."""
     try:
-        import pyaudio, os as _os
-        devnull = _os.open("/dev/null", _os.O_WRONLY)
-        old_err = _os.dup(2)
-        _os.dup2(devnull, 2)
+        out = subprocess.run(["arecord", "-l"], capture_output=True, text=True, timeout=5).stdout
+        m = re.search(r"card (\d+):.*?device (\d+):", out)
+        if m:
+            return f"plughw:{m.group(1)},{m.group(2)}"
+    except Exception:
+        pass
+    return "default"
+
+def mic_thread():
+    """Live mic level via arecord on the RAW hardware device. If capture works,
+    the bar moves when you speak — the quickest confirmation the mic is alive."""
+    dev = capture_device()
+    while True:
         try:
-            pa = pyaudio.PyAudio()
-            stream = pa.open(format=pyaudio.paInt16, channels=1, rate=16000,
-                             input=True, frames_per_buffer=512)
-            _os.dup2(old_err, 2)
+            p = subprocess.Popen(
+                ["arecord", "-D", dev, "-f", "S16_LE", "-r", "16000", "-c", "1", "-t", "raw", "-q"],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             while True:
-                try:
-                    data = stream.read(512, exception_on_overflow=False)
-                    samples = struct.unpack(f"{len(data)//2}h", data)
-                    rms = math.sqrt(sum(s*s for s in samples) / len(samples))
-                    with SL: S["mic"] = min(1.0, rms / 6000)
-                except Exception: time.sleep(0.05)
+                data = p.stdout.read(2048)
+                if not data:
+                    break
+                n = len(data) // 2
+                if n == 0:
+                    continue
+                samples = struct.unpack(f"{n}h", data[:n*2])
+                rms = math.sqrt(sum(s*s for s in samples) / n)
+                with SL: S["mic"] = min(1.0, rms / 3000)
         except Exception:
-            _os.dup2(old_err, 2)
-    except Exception: pass
+            time.sleep(1)   # capture died — retry after a beat
 
 def voice_thread():
     try:
@@ -422,8 +433,19 @@ async def main():
             with SL:
                 vq = S["voice_q"][:]; S["voice_q"].clear()
                 busy = S["ai_busy"]; partial = S["ai_partial"]; done = S["ai_done"]
-            if vq:
-                input_buf = vq[-1]; dirty = True
+            # A spoken transcript (from the PTT daemon via FIFO) is submitted to
+            # the AI exactly like typing it and pressing Enter.
+            if vq and not busy:
+                spoken = vq[-1].strip()
+                if spoken:
+                    input_buf = ""
+                    messages.append(("You", spoken))
+                    messages.append(("AI", ""))
+                    with SL:
+                        S["ai_partial"] = ""; S["ai_busy"] = True; S["ai_done"] = False
+                    threading.Thread(target=run_ai, args=(spoken,), daemon=True).start()
+                    busy = True
+                dirty = True
 
             # merge streamed tokens into the last (AI) message
             if busy:

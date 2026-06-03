@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# aios-mictest — does the microphone actually capture audio?
+# Isolates the HARDWARE/ALSA layer from keyd, Whisper, and the AI. Run this on
+# bare metal to answer "is the mic alive?" with a clear yes/no.
+set -uo pipefail
+
+echo "════════════════════════════════════════════════"
+echo "  AIos microphone test"
+echo "════════════════════════════════════════════════"
+
+echo ""
+echo "1) Capture devices the kernel sees:"
+if ! arecord -l 2>/dev/null | grep -q card; then
+    echo "   ✗ NO capture devices found."
+    echo "     The mic isn't detected at the driver level. Usually missing"
+    echo "     firmware. Check:  dmesg | grep -i -E 'sof|firmware|audio'"
+    exit 1
+fi
+arecord -l | sed 's/^/   /'
+
+CARD=$(arecord -l | sed -n 's/^card \([0-9]\+\):.*device \([0-9]\+\):.*/\1/p' | head -1)
+DEV=$(arecord  -l | sed -n 's/^card \([0-9]\+\):.*device \([0-9]\+\):.*/\2/p' | head -1)
+PLUGHW="plughw:${CARD},${DEV}"
+echo ""
+echo "   Using device: $PLUGHW"
+
+echo ""
+echo "2) Un-muting capture + raising mic gain on card $CARD..."
+for ctl in Capture Mic "Internal Mic" "Mic Boost"; do
+    amixer -c "$CARD" sset "$ctl" cap        >/dev/null 2>&1 || true
+    amixer -c "$CARD" sset "$ctl" 80% unmute >/dev/null 2>&1 || true
+done
+echo "   done."
+
+echo ""
+echo "3) Recording 3 seconds — SPEAK NOW (say 'testing one two three')..."
+WAV=$(mktemp --suffix=.wav)
+arecord -D "$PLUGHW" -f S16_LE -r 16000 -c 1 -d 3 "$WAV" 2>/dev/null || {
+    echo "   ✗ arecord failed on $PLUGHW"; exit 1; }
+
+# Measure the level with python (audioop was removed in 3.13)
+LEVEL=$(python3 - "$WAV" <<'PY'
+import sys, wave, struct
+with wave.open(sys.argv[1],"rb") as w: f=w.readframes(w.getnframes())
+n=len(f)//2
+s=struct.unpack(f"{n}h", f[:n*2]) if n else [0]
+print(int((sum(x*x for x in s)/max(1,n))**0.5))
+PY
+)
+
+echo ""
+echo "4) Result:"
+echo "   Recorded signal level (RMS): $LEVEL"
+if [ "${LEVEL:-0}" -lt 120 ]; then
+    echo "   ✗ SILENT — the mic captured nothing."
+    echo "     • Try a different card/device above (run: arecord -L)"
+    echo "     • Check it isn't muted in:  alsamixer  (F4 = capture, M = unmute)"
+    echo "     • Internal laptop mics on modern Intel need sof-firmware (baked in)."
+else
+    echo "   ✓ MIC WORKS — captured real audio. Playing it back now..."
+    aplay "$WAV" 2>/dev/null || echo "     (playback device busy — capture still works)"
+fi
+rm -f "$WAV"
+echo ""
+echo "   If this passes, hold Caps Lock in the AIos UI and your speech will be"
+echo "   transcribed and sent to the AI."
+echo "════════════════════════════════════════════════"
