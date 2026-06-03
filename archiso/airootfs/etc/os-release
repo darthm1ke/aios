@@ -1,7 +1,9 @@
 NAME="AIos"
-PRETTY_NAME="AIos Linux (powered by Arch)"
+PRETTY_NAME="AIos Linux 0.5.0 (powered by Arch)"
 ID=aios
 ID_LIKE=arch
+VERSION="0.5.0"
+VERSION_ID="0.5.0"
 BUILD_ID=rolling
 ANSI_COLOR="38;2;0;200;255"
 HOME_URL="https://github.com/darthm1ke/archai"
