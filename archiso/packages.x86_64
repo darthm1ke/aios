@@ -91,9 +91,10 @@ arch-install-scripts
 parted
 lvm2
 mdadm
-grub
-os-prober          # detect other OSes (Ubuntu) for dual-boot GRUB menu
+# os-prober: detect other OSes (Ubuntu) for the dual-boot GRUB menu
+# (grub itself is already listed in the Boot section above)
+os-prober
 # --- Connectivity / hardware diagnosis (AI's "get you online" toolkit) ---
-rfkill             # unblock soft/hard-blocked wifi radios
-wireless-regdb     # wifi regulatory domain
-inetutils          # ping/hostname for connectivity checks
+# rfkill (unblock wifi) and ping are already provided by util-linux / iputils
+# in base. wireless-regdb = wifi regulatory domain.
+wireless-regdb
