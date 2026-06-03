@@ -22,7 +22,7 @@ fi
 # the live system needs ZERO network to run the AI.
 
 # ── Enable core services ──────────────────────────────────────────────────────
-systemctl enable ollama.service 2>/dev/null || systemctl enable ollama-vulkan.service 2>/dev/null || true
+systemctl enable ollama.service
 systemctl enable aios-model-init.service     # offline warmup — no network, no pull
 systemctl enable archspeech.service
 systemctl enable archspeech-ptt.service       # Caps Lock push-to-talk (evdev + espeak-ng)

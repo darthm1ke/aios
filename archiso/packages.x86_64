@@ -40,14 +40,12 @@ htop
 man-db
 man-pages
 
-# --- Local AI inference (GPU-accelerated via Vulkan) ---
-ollama-vulkan
-vulkan-icd-loader
-# Vulkan ICDs — pure libraries, no udev rules, safe on any hardware
-vulkan-intel
-vulkan-radeon
-# intel-compute-runtime and nvidia-utils removed — install udev rules that
-# hang boot when hardware isn't fully initialized in the live environment
+# --- Local AI inference (CPU-only for maximum hardware compatibility) ---
+# Plain CPU Ollama. GPU backends (vulkan/cuda/rocm) produced corrupted
+# token-salad output on some integrated GPUs — a 0.5B model runs fine on CPU
+# in a few seconds and is deterministic on ANY machine, which is the whole
+# point of this distro. No GPU driver lottery, no troubleshooting.
+ollama
 
 # --- Python (AI daemon runtime) ---
 python

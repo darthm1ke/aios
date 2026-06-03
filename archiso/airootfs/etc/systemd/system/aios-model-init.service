@@ -17,7 +17,7 @@ ExecStart=/bin/bash -c '\
     done; \
     echo "Preloading qwen2.5:0.5b into memory..."; \
     curl -sf http://localhost:11434/api/generate \
-        -d "{\\"model\\":\\"qwen2.5:0.5b\\",\\"prompt\\":\\"\\",\\"keep_alive\\":-1}" \
+        -d "{\\"model\\":\\"qwen2.5:0.5b\\",\\"prompt\\":\\"\\",\\"keep_alive\\":-1,\\"options\\":{\\"num_gpu\\":0}}" \
         >/dev/null 2>&1 || echo "warmup skipped (model loads on first use)"; \
     mkdir -p /var/lib/aios && touch /var/lib/aios/.model_ready; \
     echo "READY: local AI warm"'
