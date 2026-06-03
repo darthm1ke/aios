@@ -2,9 +2,16 @@
 """
 AIos Dashboard — ANSI-based, works on VGA console, X11, Wayland, SSH.
 No curses dependency — pure escape codes for maximum compatibility.
+
+Rendering: cursor-home overwrite (NOT full-screen clear) so the console never
+flickers and typing is never swallowed. Terminal size comes from a cheap ioctl
+(os.get_terminal_size), never a `tput` subprocess.
+
+AI: responses STREAM token-by-token in a background thread, so the UI keeps
+redrawing while the model thinks and you can see it working in real time.
 """
 
-import asyncio, subprocess, threading, time, os, sys, select
+import asyncio, subprocess, threading, time, os, sys, select, textwrap
 import json, urllib.request, struct, math
 from pathlib import Path
 
@@ -12,10 +19,10 @@ SOCKET_PATH = "/run/archspeech/daemon.sock"
 STATUS_FILE = Path("/var/lib/aios/model_status")
 READY_FLAG  = Path("/var/lib/aios/.model_ready")
 VOICE_FIFO  = Path("/run/archspeech/voice_input")
+CHEAT_DIR   = Path("/etc/archspeech/cheatsheets")
+MODEL       = "qwen2.5:0.5b"
 
-# ANSI helpers
-def cls():       print("\033[2J\033[H", end="", flush=True)
-def goto(r, c):  print(f"\033[{r};{c}H", end="", flush=True)
+# ── ANSI helpers ────────────────────────────────────────────────────────────
 def bold(s):     return f"\033[1m{s}\033[0m"
 def cyan(s):     return f"\033[1;36m{s}\033[0m"
 def green(s):    return f"\033[0;32m{s}\033[0m"
@@ -41,7 +48,31 @@ def box(title, content_lines, width):
     lines.append(bottom)
     return lines
 
-# ── Shared state ──────────────────────────────────────────────────────────────
+def term_size():
+    try:
+        sz = os.get_terminal_size(sys.stdout.fileno())
+        return sz.columns, sz.lines
+    except Exception:
+        return 80, 24
+
+# ── Cheat sheets: the 0.5B model can't recall Arch commands alone, so we give
+#    it ALL of them in the system prompt (they total ~1.2K tokens). ────────────
+def load_cheats():
+    parts = []
+    if CHEAT_DIR.is_dir():
+        for p in sorted(CHEAT_DIR.glob("*.md")):
+            try: parts.append(p.read_text().strip())
+            except Exception: pass
+    return "\n\n".join(parts)
+
+SYSTEM_PROMPT = (
+    "You are AIos, the AI assistant of an Arch Linux installer. Give short, "
+    "direct answers with the exact commands to run. Use pacman for packages and "
+    "systemctl for services. Be concise.\n\n"
+    "=== COMMAND REFERENCE (use these exact commands) ===\n" + load_cheats()
+)
+
+# ── Shared state ────────────────────────────────────────────────────────────
 S = {
     "mic":        0.0,
     "vol":        80,
@@ -55,9 +86,12 @@ S = {
     "net_down":   0,
     "ai_status":  "Starting...",
     "ai_ready":   False,
-    "messages":   [],
     "voice_q":    [],
     "recording":  False,
+    # streaming response state
+    "ai_partial": "",
+    "ai_busy":    False,
+    "ai_done":    False,
 }
 SL = threading.Lock()
 
@@ -65,7 +99,6 @@ SL = threading.Lock()
 def hw_thread():
     while True:
         try:
-            # Battery
             for b in ["BAT0","BAT1"]:
                 p = Path(f"/sys/class/power_supply/{b}/capacity")
                 if p.exists():
@@ -73,14 +106,12 @@ def hw_thread():
                     chg = Path(f"/sys/class/power_supply/{b}/status").read_text().strip() == "Charging"
                     with SL: S["bat"] = pct; S["bat_chg"] = chg
                     break
-            # GPU (Intel)
             for g in Path("/sys/class/drm").glob("card*/gt_cur_freq_mhz"):
                 mx = g.parent / "gt_max_freq_mhz"
                 if mx.exists():
                     pct = int(int(g.read_text()) / int(mx.read_text()) * 100)
                     with SL: S["gpu"] = pct
                     break
-            # CPU
             with open("/proc/stat") as f:
                 vals = list(map(int, f.readline().split()[1:]))
             idle, total = vals[3], sum(vals)
@@ -89,7 +120,6 @@ def hw_thread():
             pi, pt = hw_thread.prev; hw_thread.prev = (idle, total)
             di, dt = idle-pi, total-pt
             with SL: S["cpu"] = int((1 - di/dt)*100) if dt else 0
-            # RAM
             info = {}
             with open("/proc/meminfo") as f:
                 for line in f:
@@ -98,7 +128,6 @@ def hw_thread():
             rt = info.get("MemTotal",0)//1024
             ru = rt - info.get("MemAvailable",0)//1024
             with SL: S["ram_used"] = ru; S["ram_total"] = rt
-            # Volume
             try:
                 r = subprocess.run(["amixer","get","Master"], capture_output=True, text=True, timeout=1)
                 for line in r.stdout.split("\n"):
@@ -107,9 +136,8 @@ def hw_thread():
                         with SL: S["vol"] = vol
                         break
             except Exception: pass
-            # AI status
             st = STATUS_FILE.read_text().strip() if STATUS_FILE.exists() else ""
-            rdy = READY_FLAG.exists()
+            rdy = READY_FLAG.exists() or ai_available()
             with SL: S["ai_status"] = st; S["ai_ready"] = rdy
         except Exception: pass
         time.sleep(1)
@@ -118,7 +146,6 @@ def mic_thread():
     """Continuously read mic level — suppress ALL stderr to avoid ALSA spam."""
     try:
         import pyaudio, os as _os
-        # Redirect stderr to suppress ALSA/Jack errors
         devnull = _os.open("/dev/null", _os.O_WRONLY)
         old_err = _os.dup(2)
         _os.dup2(devnull, 2)
@@ -126,7 +153,7 @@ def mic_thread():
             pa = pyaudio.PyAudio()
             stream = pa.open(format=pyaudio.paInt16, channels=1, rate=16000,
                              input=True, frames_per_buffer=512)
-            _os.dup2(old_err, 2)  # restore stderr
+            _os.dup2(old_err, 2)
             while True:
                 try:
                     data = stream.read(512, exception_on_overflow=False)
@@ -156,32 +183,67 @@ def ai_available():
         return True
     except Exception: return False
 
-async def ask_ai(msg):
+def stream_ai(msg):
+    """Stream the model's reply token-by-token into S['ai_partial'].
+    Runs in its own thread so the UI never blocks. Always sets ai_done."""
     payload = json.dumps({
-        "model": "qwen2.5:0.5b",
+        "model": MODEL,
         "messages": [
-            {"role":"system","content":"You are AIos, an AI assistant for Arch Linux. Give short direct commands. Use pacman for packages, systemctl for services. Be concise."},
-            {"role":"user","content": msg}
+            {"role":"system","content": SYSTEM_PROMPT},
+            {"role":"user","content": msg},
         ],
-        "stream": False,
-        "options": {"num_ctx":2048,"temperature":0.7,"num_predict":256}
+        "stream": True,
+        "options": {"num_ctx":4096,"temperature":0.7,"num_predict":256},
     }).encode()
     req = urllib.request.Request("http://localhost:11434/api/chat",
         data=payload, headers={"Content-Type":"application/json"}, method="POST")
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        return json.loads(resp.read()).get("message",{}).get("content","").strip()
+    got = False
+    try:
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            for raw in resp:
+                raw = raw.strip()
+                if not raw: continue
+                try: evt = json.loads(raw)
+                except Exception: continue
+                tok = evt.get("message",{}).get("content","")
+                if tok:
+                    got = True
+                    with SL: S["ai_partial"] += tok
+                if evt.get("done"):
+                    if not got:
+                        dr = evt.get("done_reason","") or "empty"
+                        with SL: S["ai_partial"] = f"(model returned no text — reason: {dr}. Try rephrasing.)"
+                    break
+    except Exception as e:
+        with SL:
+            S["ai_partial"] = (S["ai_partial"] + f"\n[error: {e}]") if S["ai_partial"] \
+                              else f"Couldn't reach the model: {e}"
+    finally:
+        with SL: S["ai_done"] = True
 
 def fmt_bytes(b):
     if b < 1024: return f"{b}B/s"
     if b < 1048576: return f"{b//1024}K/s"
     return f"{b//1048576}M/s"
 
+# ── Conversation wrapping ──────────────────────────────────────────────────────
+def conversation_lines(messages, width):
+    """Flatten messages into wrapped display lines, tagged with role for color."""
+    out = []
+    avail = max(20, width - 4)
+    for role, text in messages:
+        text = " ".join(str(text).split())  # collapse newlines/whitespace
+        prefix = f"  {role}: "
+        wrapped = textwrap.wrap(text, width=max(10, avail - len(prefix)),
+                                break_long_words=True) or [""]
+        out.append((role, prefix + wrapped[0]))
+        for cont in wrapped[1:]:
+            out.append((role, "      " + cont))
+    return out
+
 # ── Render ────────────────────────────────────────────────────────────────────
-def render(messages, input_buf):
-    try:
-        cols = int(subprocess.run(["tput","cols"], capture_output=True, text=True).stdout.strip())
-        rows = int(subprocess.run(["tput","lines"], capture_output=True, text=True).stdout.strip())
-    except Exception: cols, rows = 80, 24
+def render(messages, input_buf, busy):
+    cols, rows = term_size()
 
     with SL:
         mic   = S["mic"]; vol = S["vol"]; gpu = S["gpu"]
@@ -218,14 +280,14 @@ def render(messages, input_buf):
 
     # ── Row 2: ai status | system ─────────────────────────────────────────────
     if ai_rdy:
-        ai_lines = [green("qwen2.5:0.5b  ready ✓"), dim("Hold Caps Lock to speak")]
+        ai_lines = [green(f"{MODEL}  ready ✓"), dim("Type a question + Enter, or hold Caps Lock to speak")]
     else:
         pct = 0
         if "%" in ai_st:
             try: pct = int(ai_st.split("%")[0].split()[-1])
             except Exception: pass
         bw2 = half - 8
-        ai_lines = [ai_st[:half-4], f"{bar(pct, bw2)} {pct}%"]
+        ai_lines = [(ai_st or "Loading model...")[:half-4], f"{bar(pct, bw2)} {pct}%"]
 
     sw = cols - half
     sys_lines = [
@@ -240,28 +302,32 @@ def render(messages, input_buf):
         sl = sys_box[i] if i < len(sys_box) else ""
         out.append((al + sl)[:cols])
 
-    # ── Conversation ──────────────────────────────────────────────────────────
-    conv_h = rows - len(out) - 4
-    out.append("┌" + f" conversation ".center(cols-2, "─") + "┐")
-    visible = messages[-(conv_h):]
-    for role, text in visible:
-        line = f"  {role}: {text}"
-        if role == "AI":
-            out.append("│" + cyan(line[:cols-4]).ljust(cols-2) + "│")
-        else:
-            out.append("│" + green(line[:cols-4]).ljust(cols-2) + "│")
+    # ── Conversation (wrapped, scrolled to the tail) ───────────────────────────
+    conv_h = max(1, rows - len(out) - 4)
+    out.append("┌" + " conversation ".center(cols-2, "─") + "┐")
+    disp = conversation_lines(messages, cols)
+    visible = disp[-conv_h:]
+    for role, line in visible:
+        colored = cyan(line[:cols-4]) if role == "AI" else green(line[:cols-4])
+        out.append("│" + colored.ljust(cols-2) + "│")
     for _ in range(conv_h - len(visible)):
         out.append("│" + " "*(cols-2) + "│")
     out.append("└" + "─"*(cols-2) + "┘")
 
     # ── Input bar ─────────────────────────────────────────────────────────────
-    prompt = "  You: " + input_buf
-    hint   = dim("  [Caps Lock] speak  │  [Right Ctrl] VM  │  [Enter] send  │  [Esc] quit")
-    out.append(prompt[:cols])
-    out.append(hint[:cols])
+    if busy:
+        out.append((dim("  (AI is responding — please wait)"))[:cols+20])
+    else:
+        out.append(("  You: " + input_buf)[:cols])
+    out.append(dim("  [Caps Lock] speak  │  [Right Ctrl] VM  │  [Enter] send  │  [Esc] quit")[:cols+20])
 
-    cls()
-    print("\n".join(out), flush=True)
+    # ── Flicker-free paint: home, overwrite each line, clear trailing ──────────
+    buf = ["\033[H"]
+    for line in out[:rows]:
+        buf.append(line + "\033[K\n")
+    buf.append("\033[J")  # wipe anything left below the frame
+    sys.stdout.write("".join(buf))
+    sys.stdout.flush()
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 async def main():
@@ -269,56 +335,69 @@ async def main():
     threading.Thread(target=mic_thread,   daemon=True).start()
     threading.Thread(target=voice_thread, daemon=True).start()
 
-    messages = [("AI", "Starting up — model loading below...")]
     if ai_available():
         messages = [("AI", "I'm ready. What would you like to do?")]
+    else:
+        messages = [("AI", "Starting up — the model is loading, one moment...")]
 
     input_buf = ""
-    os.system("tput civis 2>/dev/null")  # hide cursor during render
+    os.system("tput civis 2>/dev/null")   # hide cursor
+    sys.stdout.write("\033[2J\033[H")      # one clean clear at startup only
+    sys.stdout.flush()
 
+    import termios, tty
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
     try:
         while True:
+            # voice transcripts arrive via FIFO → drop into the input line
             with SL:
-                vq = S["voice_q"][:]
-                S["voice_q"].clear()
+                vq = S["voice_q"][:]; S["voice_q"].clear()
+                busy = S["ai_busy"]; partial = S["ai_partial"]; done = S["ai_done"]
             for vt in vq:
                 input_buf = vt
 
-            render(messages, input_buf)
+            # merge streamed tokens into the last (AI) message
+            if busy:
+                if partial:
+                    messages[-1] = ("AI", partial)
+                else:
+                    spin = "|/-\\"[int(time.time()*5) % 4]
+                    messages[-1] = ("AI", f"thinking {spin}")
+                if done:
+                    messages[-1] = ("AI", partial.strip() or "(no response)")
+                    with SL: S["ai_busy"] = False
+                    busy = False
 
-            # Non-blocking keyboard
-            import termios, tty
-            fd = sys.stdin.fileno()
-            old = termios.tcgetattr(fd)
+            render(messages, input_buf, busy)
+
+            # ── Non-blocking keyboard ──────────────────────────────────────────
             try:
                 tty.setraw(fd)
-                rlist, _, _ = select.select([sys.stdin], [], [], 0.15)
+                rlist, _, _ = select.select([sys.stdin], [], [], 0.12)
                 if rlist:
                     ch = sys.stdin.read(1)
-                    if ch == "\x1b":  # Esc
+                    if ch == "\x1b":            # Esc → quit
                         break
-                    elif ch in ("\r", "\n"):
-                        if input_buf.strip():
-                            msg = input_buf.strip()
-                            input_buf = ""
+                    elif ch in ("\r", "\n"):    # Enter → send (ignored while busy)
+                        if input_buf.strip() and not busy:
+                            msg = input_buf.strip(); input_buf = ""
                             messages.append(("You", msg))
-                            messages.append(("AI", "thinking..."))
-                            render(messages, input_buf)
-                            try:
-                                resp = await ask_ai(msg)
-                                messages[-1] = ("AI", resp)
-                            except Exception as e:
-                                messages[-1] = ("AI", f"Error: {e}")
-                    elif ch == "\x7f":
+                            messages.append(("AI", ""))
+                            with SL:
+                                S["ai_partial"] = ""; S["ai_busy"] = True; S["ai_done"] = False
+                            threading.Thread(target=stream_ai, args=(msg,), daemon=True).start()
+                    elif ch == "\x7f":          # Backspace
                         input_buf = input_buf[:-1]
                     elif ch.isprintable():
                         input_buf += ch
             finally:
                 termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.03)
     finally:
-        os.system("tput cnorm 2>/dev/null")  # restore cursor
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        os.system("tput cnorm 2>/dev/null")   # restore cursor
 
 if __name__ == "__main__":
     asyncio.run(main())
