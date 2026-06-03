@@ -99,6 +99,7 @@ S = {
     "net_down":   0,
     "ai_status":  "Starting...",
     "ai_ready":   False,
+    "ptt_status": "",
     "voice_q":    [],
     "recording":  False,
     # streaming response state
@@ -155,43 +156,27 @@ def hw_thread():
                 except Exception: pass
             st = STATUS_FILE.read_text().strip() if STATUS_FILE.exists() else ""
             rdy = READY_FLAG.exists() or ai_available()
-            with SL: S["ai_status"] = st; S["ai_ready"] = rdy
+            pst = ""
+            try:
+                pp = Path("/run/archspeech/ptt_status")
+                if pp.exists(): pst = pp.read_text().strip()
+            except Exception: pass
+            with SL: S["ai_status"] = st; S["ai_ready"] = rdy; S["ptt_status"] = pst
         except Exception: pass
         time.sleep(1)
 
-def capture_device():
-    """First ALSA capture device as plughw:card,dev — bypasses the pipewire
-    'default', which captures silence when running as root with no session."""
-    try:
-        out = subprocess.run(["arecord", "-l"], capture_output=True, text=True, timeout=5).stdout
-        m = re.search(r"card (\d+):.*?device (\d+):", out)
-        if m:
-            return f"plughw:{m.group(1)},{m.group(2)}"
-    except Exception:
-        pass
-    return "default"
-
 def mic_thread():
-    """Live mic level via arecord on the RAW hardware device. If capture works,
-    the bar moves when you speak — the quickest confirmation the mic is alive."""
-    dev = capture_device()
+    """The PTT daemon is the SOLE owner of the mic (a raw ALSA device is
+    single-client) and publishes the live level to /run/archspeech/mic_level.
+    We just read that file — no contention with the PTT's recording."""
+    lp = Path("/run/archspeech/mic_level")
     while True:
         try:
-            p = subprocess.Popen(
-                ["arecord", "-D", dev, "-f", "S16_LE", "-r", "16000", "-c", "1", "-t", "raw", "-q"],
-                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            while True:
-                data = p.stdout.read(2048)
-                if not data:
-                    break
-                n = len(data) // 2
-                if n == 0:
-                    continue
-                samples = struct.unpack(f"{n}h", data[:n*2])
-                rms = math.sqrt(sum(s*s for s in samples) / n)
-                with SL: S["mic"] = min(1.0, rms / 3000)
+            lvl = int(lp.read_text().strip()) if lp.exists() else 0
+            with SL: S["mic"] = min(1.0, lvl / 3000)
         except Exception:
-            time.sleep(1)   # capture died — retry after a beat
+            with SL: S["mic"] = 0.0
+        time.sleep(0.1)
 
 def voice_thread():
     try:
@@ -324,7 +309,7 @@ def render(messages, input_buf, busy):
         ru    = S["ram_used"]; rt = S["ram_total"]
         nu    = S["net_up"]; nd = S["net_down"]
         ai_st = S["ai_status"]; ai_rdy = S["ai_ready"]
-        rec   = S["recording"]
+        rec   = S["recording"]; pst = S["ptt_status"]
 
     out = []
 
@@ -376,7 +361,7 @@ def render(messages, input_buf, busy):
         out.append((al + sl)[:cols])
 
     # ── Conversation (wrapped, scrolled to the tail) ───────────────────────────
-    conv_h = max(1, rows - len(out) - 4)
+    conv_h = max(1, rows - len(out) - (5 if pst else 4))
     out.append("┌" + " conversation ".center(cols-2, "─") + "┐")
     disp = conversation_lines(messages, cols)
     visible = disp[-conv_h:]
@@ -392,6 +377,8 @@ def render(messages, input_buf, busy):
         out.append((dim("  (AI is responding — please wait)"))[:cols+20])
     else:
         out.append(("  You: " + input_buf)[:cols])
+    if pst:
+        out.append(yellow(f"  🎤 voice: {pst}")[:cols+30])
     out.append(dim("  [Caps Lock] speak  │  [Right Ctrl] VM  │  [Enter] send  │  [Esc] quit")[:cols+20])
 
     # ── Flicker-free paint: home, overwrite each line, clear trailing ──────────

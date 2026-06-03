@@ -8,6 +8,18 @@ echo "════════════════════════�
 echo "  AIos microphone test"
 echo "════════════════════════════════════════════════"
 
+# The PTT daemon holds the mic open (it's the sole owner). Free the device for
+# this test, then hand it back when we're done.
+PTT_WAS_UP=0
+if systemctl is-active --quiet archspeech-ptt 2>/dev/null; then
+    PTT_WAS_UP=1
+    echo "(pausing the voice daemon so it releases the mic for this test...)"
+    systemctl stop archspeech-ptt 2>/dev/null || true
+    sleep 1
+fi
+restore_ptt() { [ "$PTT_WAS_UP" = 1 ] && systemctl start archspeech-ptt 2>/dev/null || true; }
+trap restore_ptt EXIT
+
 echo ""
 echo "1) Capture devices the kernel sees:"
 if ! arecord -l 2>/dev/null | grep -q card; then
