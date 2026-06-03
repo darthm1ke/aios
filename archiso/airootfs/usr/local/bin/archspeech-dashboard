@@ -128,14 +128,18 @@ def hw_thread():
             rt = info.get("MemTotal",0)//1024
             ru = rt - info.get("MemAvailable",0)//1024
             with SL: S["ram_used"] = ru; S["ram_total"] = rt
-            try:
-                r = subprocess.run(["amixer","get","Master"], capture_output=True, text=True, timeout=1)
-                for line in r.stdout.split("\n"):
-                    if "%" in line:
-                        vol = int(line.split("[")[1].split("%")[0])
-                        with SL: S["vol"] = vol
-                        break
-            except Exception: pass
+            # Volume via amixer is a subprocess spawn — poll it only every ~5s,
+            # not every second, so it never competes with the input loop.
+            hw_thread.tick = getattr(hw_thread, "tick", 0) + 1
+            if hw_thread.tick % 5 == 1:
+                try:
+                    r = subprocess.run(["amixer","get","Master"], capture_output=True, text=True, timeout=1)
+                    for line in r.stdout.split("\n"):
+                        if "%" in line:
+                            vol = int(line.split("[")[1].split("%")[0])
+                            with SL: S["vol"] = vol
+                            break
+                except Exception: pass
             st = STATUS_FILE.read_text().strip() if STATUS_FILE.exists() else ""
             rdy = READY_FLAG.exists() or ai_available()
             with SL: S["ai_status"] = st; S["ai_ready"] = rdy
@@ -328,9 +332,11 @@ def render(messages, input_buf, busy):
     out.append(dim("  [Caps Lock] speak  │  [Right Ctrl] VM  │  [Enter] send  │  [Esc] quit")[:cols+20])
 
     # ── Flicker-free paint: home, overwrite each line, clear trailing ──────────
+    # \r\n (not \n): raw mode disables newline translation, so we emit CR+LF
+    # ourselves or every line would stair-step across the screen.
     buf = ["\033[H"]
     for line in out[:rows]:
-        buf.append(line + "\033[K\n")
+        buf.append(line + "\033[K\r\n")
     buf.append("\033[J")  # wipe anything left below the frame
     sys.stdout.write("".join(buf))
     sys.stdout.flush()
@@ -347,21 +353,25 @@ async def main():
         messages = [("AI", "Starting up — the model is loading, one moment...")]
 
     input_buf = ""
-    os.system("tput civis 2>/dev/null")   # hide cursor
-    sys.stdout.write("\033[2J\033[H")      # one clean clear at startup only
+    os.system("tput civis 2>/dev/null")               # hide cursor
+    os.system("setterm -blank 0 -powersave off 2>/dev/null")  # no console blanking
+    sys.stdout.write("\033[2J\033[H")                 # one clean clear at startup only
     sys.stdout.flush()
 
     import termios, tty
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
+    tty.setraw(fd)                 # raw ONCE — toggling it every frame raced with input
+    last_render = 0.0
+    dirty = True                   # repaint flag: set on any state change
     try:
         while True:
             # voice transcripts arrive via FIFO → drop into the input line
             with SL:
                 vq = S["voice_q"][:]; S["voice_q"].clear()
                 busy = S["ai_busy"]; partial = S["ai_partial"]; done = S["ai_done"]
-            for vt in vq:
-                input_buf = vt
+            if vq:
+                input_buf = vq[-1]; dirty = True
 
             # merge streamed tokens into the last (AI) message
             if busy:
@@ -374,18 +384,27 @@ async def main():
                     messages[-1] = ("AI", partial.strip() or "(no response)")
                     with SL: S["ai_busy"] = False
                     busy = False
+                dirty = True       # keep the stream visibly updating
 
-            render(messages, input_buf, busy)
+            # Repaint only when something changed, while streaming, or every 0.4s
+            # for the live stats — NOT 6×/second. This is what stops the refresh
+            # from fighting your typing.
+            now = time.monotonic()
+            if dirty or busy or (now - last_render) >= 0.4:
+                render(messages, input_buf, busy)
+                last_render = now
+                dirty = False
 
-            # ── Non-blocking keyboard ──────────────────────────────────────────
-            try:
-                tty.setraw(fd)
-                rlist, _, _ = select.select([sys.stdin], [], [], 0.12)
-                if rlist:
-                    ch = sys.stdin.read(1)
-                    if ch == "\x1b":            # Esc → quit
-                        break
-                    elif ch in ("\r", "\n"):    # Enter → send (ignored while busy)
+            # ── Keyboard: drain ALL buffered bytes so fast typing is never lost ─
+            rlist, _, _ = select.select([sys.stdin], [], [], 0.08)
+            if rlist:
+                data = os.read(fd, 1024)
+                if data == b"\x1b":          # lone Esc → quit
+                    break
+                if data[:1] == b"\x1b":      # arrow/function escape sequence → ignore
+                    continue
+                for ch in data.decode("utf-8", "ignore"):
+                    if ch in ("\r", "\n"):   # Enter → send (ignored while busy)
                         if input_buf.strip() and not busy:
                             msg = input_buf.strip(); input_buf = ""
                             messages.append(("You", msg))
@@ -393,14 +412,12 @@ async def main():
                             with SL:
                                 S["ai_partial"] = ""; S["ai_busy"] = True; S["ai_done"] = False
                             threading.Thread(target=stream_ai, args=(msg,), daemon=True).start()
-                    elif ch == "\x7f":          # Backspace
+                    elif ch == "\x7f":       # Backspace
                         input_buf = input_buf[:-1]
                     elif ch.isprintable():
                         input_buf += ch
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old)
-
-            await asyncio.sleep(0.03)
+                dirty = True                 # echo typed chars immediately
+            await asyncio.sleep(0)
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
         os.system("tput cnorm 2>/dev/null")   # restore cursor
