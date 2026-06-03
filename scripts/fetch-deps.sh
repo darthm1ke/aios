@@ -19,34 +19,37 @@ echo "════════════════════════�
 echo ""
 
 # ── Qwen2.5 0.5B — baked into the ISO Ollama store (~400MB) ─────────────────
-# We pull on the BUILD host via the system Ollama service (stores under
-# /var/lib/ollama as the ollama user), then copy the blob store straight into
-# the airootfs tree. On the live system Ollama already has the model — no pull,
-# no USB mount, no RAM copy, works fully offline and survives install-to-disk.
-HOST_STORE="/var/lib/ollama"
-if sudo test -d "$OLLAMA_DIR/manifests/registry.ollama.ai/library/qwen2.5"; then
-    echo "✓ qwen2.5:0.5b already baked into airootfs ($(sudo du -sh "$OLLAMA_DIR" | cut -f1))"
+# No sudo, no system service: we run a throwaway user-space Ollama with
+# OLLAMA_MODELS pointed straight at the airootfs tree, so `ollama pull` writes
+# the blob store EXACTLY where the ISO expects it (/var/lib/ollama). On the
+# live system Ollama already has the model — no pull, no USB, works offline and
+# survives install-to-disk. customize_airootfs.sh chowns it to ollama at build.
+if [ -d "$OLLAMA_DIR/manifests/registry.ollama.ai/library/qwen2.5" ]; then
+    echo "✓ qwen2.5:0.5b already baked into airootfs ($(du -sh "$OLLAMA_DIR" | cut -f1))"
 else
-    echo "▶ Pulling qwen2.5:0.5b on the build host..."
     if ! command -v ollama >/dev/null; then
         echo "✗ ollama not installed on build host — install it: sudo pacman -S ollama"
         exit 1
     fi
-    sudo systemctl start ollama 2>/dev/null || true
+    echo "▶ Starting a throwaway user-space Ollama (models -> airootfs)..."
+    export OLLAMA_MODELS="$OLLAMA_DIR"
+    ollama serve >/tmp/aios-ollama-fetch.log 2>&1 &
+    FETCH_OLLAMA_PID=$!
+    trap 'kill $FETCH_OLLAMA_PID 2>/dev/null || true' EXIT
+    for i in $(seq 1 30); do
+        curl -sf http://localhost:11434/api/version >/dev/null 2>&1 && break
+        sleep 1
+    done
+    echo "▶ Pulling qwen2.5:0.5b..."
     ollama pull qwen2.5:0.5b
-
-    if ! sudo test -d "$HOST_STORE/manifests/registry.ollama.ai/library/qwen2.5"; then
-        echo "✗ Pull succeeded but model not found in $HOST_STORE — is the system ollama.service the one you pulled with?"
+    kill $FETCH_OLLAMA_PID 2>/dev/null || true
+    trap - EXIT
+    if [ ! -d "$OLLAMA_DIR/manifests/registry.ollama.ai/library/qwen2.5" ]; then
+        echo "✗ Pull did not land in $OLLAMA_DIR — see /tmp/aios-ollama-fetch.log"
         exit 1
     fi
-
-    echo "▶ Baking model store into airootfs..."
-    sudo rm -rf "$OLLAMA_DIR/blobs" "$OLLAMA_DIR/manifests"
-    sudo cp -r "$HOST_STORE/blobs"     "$OLLAMA_DIR/blobs"
-    sudo cp -r "$HOST_STORE/manifests" "$OLLAMA_DIR/manifests"
-    # readable by everyone so it survives the chroot chown in customize_airootfs.sh
-    sudo chmod -R a+rX "$OLLAMA_DIR"
-    echo "✓ Baked into $OLLAMA_DIR — $(sudo du -sh "$OLLAMA_DIR" | cut -f1)"
+    chmod -R a+rX "$OLLAMA_DIR"
+    echo "✓ Baked into $OLLAMA_DIR — $(du -sh "$OLLAMA_DIR" | cut -f1)"
 fi
 
 # ── pip wheels (pure-Python packages only, cached as wheels) ─────────────────

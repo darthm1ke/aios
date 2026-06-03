@@ -15,7 +15,7 @@ if ! command -v mkarchiso &>/dev/null; then
 fi
 
 MODEL_STORE="$PROFILE/airootfs/var/lib/ollama/manifests/registry.ollama.ai/library/qwen2.5"
-if ! sudo test -d "$MODEL_STORE"; then
+if [ ! -d "$MODEL_STORE" ]; then
     echo "✗ Baked Ollama model store not found ($MODEL_STORE)."
     echo "  Run:  bash $PROJECT/scripts/fetch-deps.sh"
     exit 1
