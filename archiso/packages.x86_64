@@ -91,3 +91,9 @@ arch-install-scripts
 parted
 lvm2
 mdadm
+grub
+os-prober          # detect other OSes (Ubuntu) for dual-boot GRUB menu
+# --- Connectivity / hardware diagnosis (AI's "get you online" toolkit) ---
+rfkill             # unblock soft/hard-blocked wifi radios
+wireless-regdb     # wifi regulatory domain
+inetutils          # ping/hostname for connectivity checks

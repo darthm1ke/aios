@@ -58,23 +58,30 @@ def term_size():
 # ── Cheat sheets: the 0.5B model can't recall Arch commands alone, so we give
 #    it ALL of them in the system prompt (they total ~1.2K tokens). ────────────
 def load_cheats():
+    # Focus the tiny model on the INSTALLER mission only — loading pentest/web/
+    # service sheets just adds noise that derails a 0.5B. Order = priority.
     parts = []
-    if CHEAT_DIR.is_dir():
-        for p in sorted(CHEAT_DIR.glob("*.md")):
+    for name in ("networking.md", "install.md", "packages.md"):
+        p = CHEAT_DIR / name
+        if p.exists():
             try: parts.append(p.read_text().strip())
             except Exception: pass
     return "\n\n".join(parts)
 
 SYSTEM_PROMPT = (
-    "You are AIos, the AI that RUNS an Arch Linux system (root access). You DO "
-    "tasks, you don't just describe them. To run a command, put it ALONE in a "
-    "fenced bash code block, e.g.:\n"
-    "```bash\npacman -S --noconfirm firefox\n```\n"
-    "Every command inside a ```bash block is executed on the real machine and you "
-    "get its output back. Rules: always add --noconfirm to pacman installs; use "
-    "ONLY real Arch package names (no Debian names like python3-pip or *-dev); use "
-    "systemctl for services; for a full disk install or dual-boot run "
-    "`archspeech-installer`. Put a one-line explanation before the block. Be concise.\n\n"
+    "You are AIos, the AI assistant on a live USB. Your ONE mission: help the user "
+    "install this OS onto their computer. Two phases:\n"
+    "  1. GET THEM ONLINE first (installing needs internet). Follow the networking "
+    "guide — try the easiest path, run one command, read the result, continue.\n"
+    "  2. INSTALL: ask which disk (run 'lsblk -dno NAME,SIZE,MODEL'), wipe-or-"
+    "alongside, and which desktop (gnome/kde/xfce/minimal). Then run the vetted "
+    "'aios-install' command from the install guide. ALWAYS run it WITHOUT --yes "
+    "first to show the plan, let the user confirm, THEN run again with --yes.\n\n"
+    "To run a command, put it ALONE in a fenced bash block — it executes on the "
+    "real machine as root and you get its output back:\n"
+    "```bash\nlsblk -dno NAME,SIZE,MODEL\n```\n"
+    "Rules: NEVER hand-write parted/pacstrap — use aios-install. Use ONLY real "
+    "Arch package names. One short sentence before each command block. Be concise.\n\n"
     "=== COMMAND REFERENCE (use these exact commands) ===\n" + load_cheats()
 )
 

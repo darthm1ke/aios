@@ -1,30 +1,30 @@
-# AIos Installation Reference
+# Installing AIos to the user's drive
 
-## Check available disks
-lsblk
-fdisk -l
+DO NOT hand-write partition/pacstrap commands — they are dangerous and easy to
+get wrong. Use the vetted installer `aios-install`. Your job is to gather 3
+choices from the user, show them the PLAN, then run it. Internet is required
+(see networking.md — get online first).
 
-## Partition a disk (NVMe: use p prefix — /dev/nvme0n1p1)
-parted -s /dev/sda mklabel gpt \
-  mkpart ESP fat32 1MiB 513MiB set 1 esp on \
-  mkpart root ext4 513MiB 100%
+## Step 1 — list the drives so the user can choose
+lsblk -dno NAME,SIZE,MODEL
 
-## Format partitions
-mkfs.fat -F32 /dev/sda1    # EFI
-mkfs.ext4 /dev/sda2        # Root
+## Step 2 — gather 3 choices from the user
+# 1. target disk     e.g. /dev/sda  or  /dev/nvme0n1
+# 2. mode            wipe       = erase the whole disk (simplest)
+#                    alongside  = keep the existing OS, install in free space (dual-boot)
+# 3. desktop         gnome (Wayland) | kde (Wayland) | xfce (X11, light) | minimal (no desktop)
 
-## Mount and install
-mount /dev/sda2 /mnt
-mkdir -p /mnt/boot/efi
-mount /dev/sda1 /mnt/boot/efi
-pacstrap /mnt base linux linux-firmware networkmanager sudo
-genfstab -U /mnt >> /mnt/etc/fstab
-arch-chroot /mnt
+## Step 3 — ALWAYS show the plan first (safe, changes nothing):
+aios-install --disk /dev/sda --mode wipe --desktop gnome
 
-## Inside chroot
-ln -sf /usr/share/zoneinfo/Region/City /etc/localtime
-locale-gen
-echo "LANG=en_US.UTF-8" > /etc/locale.conf
-systemctl enable NetworkManager
-grub-install --target=x86_64-efi --efi-directory=/boot/efi
-grub-mkconfig -o /boot/grub/grub.cfg
+## Step 4 — only after the user confirms, add --yes to actually do it:
+aios-install --disk /dev/sda --mode wipe --desktop gnome --yes
+
+## Notes
+# - "wipe" ERASES everything on that disk. Make the user confirm the disk first
+#   (match the size/model from lsblk to the drive they mean).
+# - "alongside" needs unallocated free space on the disk. If there is none,
+#   tell the user to shrink their existing OS partition first, then retry.
+# - The installer copies the AIos AI core (model included) onto the new system,
+#   so the AI still works there with no internet.
+# - After it finishes, tell the user to reboot and remove the USB.

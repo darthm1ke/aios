@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# aios-install — AIos guided OS installer (called by the AI with explicit args).
+#
+# The AI does NOT hand-write parted/pacstrap. It gathers the user's choices and
+# runs this vetted script. SAFE BY DEFAULT: prints the plan and changes nothing
+# unless --yes is given.
+#
+# Usage:
+#   aios-install --disk /dev/sdX --mode wipe|alongside --desktop gnome|kde|xfce|minimal \
+#                [--user NAME] [--hostname NAME] [--timezone Region/City] \
+#                [--locale en_US.UTF-8] [--yes]
+# ─────────────────────────────────────────────────────────────────────────────
+set -uo pipefail
+
+DISK=""; MODE=""; DESKTOP=""; DO_IT=0
+USERNAME="aios"; HOSTNAME_="aios"; TIMEZONE="UTC"; LOCALE="en_US.UTF-8"
+USERPASS="aios"
+
+source /usr/local/lib/archspeech/installer/common.sh 2>/dev/null || \
+  part() { echo "$1$( echo "$1" | grep -qE 'nvme|mmcblk' && echo p )$2"; }
+
+die()  { echo "ERROR: $*" >&2; exit 1; }
+say()  { echo ">> $*"; }
+step() { echo ""; echo "── $* ──"; }
+
+# ── Parse args ────────────────────────────────────────────────────────────────
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --disk)     DISK="$2"; shift 2 ;;
+    --mode)     MODE="$2"; shift 2 ;;
+    --desktop)  DESKTOP="$2"; shift 2 ;;
+    --user)     USERNAME="$2"; shift 2 ;;
+    --hostname) HOSTNAME_="$2"; shift 2 ;;
+    --timezone) TIMEZONE="$2"; shift 2 ;;
+    --locale)   LOCALE="$2"; shift 2 ;;
+    --yes)      DO_IT=1; shift ;;
+    *) die "unknown argument: $1" ;;
+  esac
+done
+
+[ -n "$DISK" ]    || die "missing --disk (run: lsblk -dno NAME,SIZE,MODEL)"
+[ -b "$DISK" ]    || die "$DISK is not a block device"
+case "$MODE"    in wipe|alongside) ;; *) die "--mode must be wipe or alongside" ;; esac
+case "$DESKTOP" in gnome|kde|xfce|minimal) ;; *) die "--desktop must be gnome|kde|xfce|minimal" ;; esac
+
+# ── Firmware mode ─────────────────────────────────────────────────────────────
+if [ -d /sys/firmware/efi ]; then FW="uefi"; else FW="bios"; fi
+
+# ── Desktop → packages + display manager ──────────────────────────────────────
+case "$DESKTOP" in
+  gnome)   DE_PKGS="gnome gdm";                                              DM="gdm"      ;;
+  kde)     DE_PKGS="plasma-meta sddm konsole dolphin";                       DM="sddm"     ;;
+  xfce)    DE_PKGS="xfce4 xfce4-goodies xorg-server lightdm lightdm-gtk-greeter"; DM="lightdm" ;;
+  minimal) DE_PKGS="";                                                       DM=""         ;;
+esac
+
+BASE_PKGS="base base-devel linux linux-firmware sudo networkmanager vim zsh git grub efibootmgr os-prober"
+# AIos runtime so the AI keeps working on the installed system
+AI_PKGS="ollama python python-pip python-requests python-pyaudio python-evdev python-openai-whisper espeak-ng keyd alsa-utils alsa-ucm-conf sof-firmware pipewire pipewire-alsa pipewire-pulse wireplumber"
+
+# ── Print the PLAN (always) ───────────────────────────────────────────────────
+DISK_DESC="$(lsblk -dno SIZE,MODEL "$DISK" 2>/dev/null | xargs)"
+cat <<PLAN
+
+╔══════════════════════════════════════════════════════════════╗
+  AIos INSTALL PLAN
+╠══════════════════════════════════════════════════════════════╣
+  Target disk : $DISK  ($DISK_DESC)
+  Mode        : $MODE $( [ "$MODE" = wipe ] && echo '(ERASES THE WHOLE DISK)' || echo '(into free space, keeps other OS)' )
+  Desktop     : $DESKTOP $( [ -n "$DM" ] && echo "(display manager: $DM)" )
+  Firmware    : $FW
+  User        : $USERNAME   Hostname: $HOSTNAME_   TZ: $TIMEZONE   Locale: $LOCALE
+╚══════════════════════════════════════════════════════════════╝
+PLAN
+
+if [ "$DO_IT" -ne 1 ]; then
+  echo ""
+  echo "This was a DRY RUN — nothing was changed."
+  echo "If the user confirms, run the exact same command again with --yes added."
+  exit 0
+fi
+
+# ── From here on we mutate the disk ───────────────────────────────────────────
+step "Checking internet (pacstrap needs it)"
+ping -c1 -W3 archlinux.org >/dev/null 2>&1 || \
+  die "No internet. Get online first (see networking.md), then retry."
+say "online ✓"
+
+PART_EFI=""; PART_ROOT=""
+
+if [ "$MODE" = "wipe" ]; then
+  step "Partitioning $DISK (WIPE)"
+  if [ "$FW" = "uefi" ]; then
+    parted -s "$DISK" mklabel gpt \
+      mkpart ESP fat32 1MiB 513MiB set 1 esp on \
+      mkpart root ext4 513MiB 100% || die "partitioning failed"
+    PART_EFI="$(part "$DISK" 1)"; PART_ROOT="$(part "$DISK" 2)"
+    mkfs.fat -F32 "$PART_EFI" || die "mkfs EFI failed"
+  else
+    parted -s "$DISK" mklabel msdos \
+      mkpart primary ext4 1MiB 100% set 1 boot on || die "partitioning failed"
+    PART_ROOT="$(part "$DISK" 1)"
+  fi
+  mkfs.ext4 -F "$PART_ROOT" || die "mkfs root failed"
+
+else  # alongside
+  step "Finding free space on $DISK (ALONGSIDE)"
+  # Largest free region in MiB
+  read -r FS_START FS_SIZE < <(parted -sm "$DISK" unit MiB print free 2>/dev/null \
+      | awk -F: '/free/{gsub("MiB","",$2);gsub("MiB","",$4); if($4+0>m){m=$4+0;s=$2+0;sz=$4+0}} END{print s, sz}')
+  [ -n "${FS_SIZE:-}" ] && awk "BEGIN{exit !($FS_SIZE>20000)}" || \
+    die "Need ~20GB of unallocated free space on $DISK; found ${FS_SIZE:-0}MiB. Shrink the existing OS partition first, then retry."
+  say "free region: start ${FS_START}MiB size ${FS_SIZE}MiB"
+  # reuse the existing EFI System Partition — never format it
+  PART_EFI="$(lsblk -lno NAME,PARTTYPE "$DISK" 2>/dev/null | awk 'tolower($2)=="c12a7328-f81f-11d2-ba4b-00a0c93ec93b"{print "/dev/"$1; exit}')"
+  [ "$FW" = "uefi" ] && [ -z "$PART_EFI" ] && die "No existing EFI partition found to share. Cannot dual-boot safely."
+  parted -s "$DISK" mkpart root ext4 "${FS_START}MiB" 100% || die "creating root partition failed"
+  PART_ROOT="$(lsblk -lno NAME "$DISK" | tail -1 | sed 's|^|/dev/|')"
+  mkfs.ext4 -F "$PART_ROOT" || die "mkfs root failed"
+fi
+
+step "Mounting"
+mount "$PART_ROOT" /mnt || die "mount root failed"
+if [ "$FW" = "uefi" ]; then
+  mkdir -p /mnt/boot/efi
+  mount "$PART_EFI" /mnt/boot/efi || die "mount EFI failed"
+fi
+
+step "Installing base system + desktop (this downloads packages — be patient)"
+# shellcheck disable=SC2086
+pacstrap /mnt $BASE_PKGS $DE_PKGS $AI_PKGS || die "pacstrap failed"
+genfstab -U /mnt >> /mnt/etc/fstab
+
+step "Configuring the new system"
+arch-chroot /mnt /bin/bash -s -- \
+  "$TIMEZONE" "$LOCALE" "$HOSTNAME_" "$USERNAME" "$USERPASS" "$DM" "$DISK" "$FW" <<'CHROOT'
+set -uo pipefail
+TZ="$1"; LOC="$2"; HN="$3"; USR="$4"; PW="$5"; DM="$6"; DISK="$7"; FW="$8"
+ln -sf "/usr/share/zoneinfo/$TZ" /etc/localtime; hwclock --systohc || true
+echo "$LOC UTF-8" >> /etc/locale.gen; locale-gen
+echo "LANG=$LOC" > /etc/locale.conf
+echo "$HN" > /etc/hostname
+printf '127.0.0.1 localhost\n::1 localhost\n127.0.1.1 %s\n' "$HN" > /etc/hosts
+useradd -m -G wheel,audio,video,storage,input,network -s /bin/zsh "$USR"
+echo "$USR:$PW" | chpasswd
+echo "root:$PW" | chpasswd
+echo "$USR ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/$USR; chmod 440 /etc/sudoers.d/$USR
+systemctl enable NetworkManager ollama keyd archspeech.service archspeech-ptt.service 2>/dev/null || true
+# Display manager + autologin (normie-friendly: boot straight into the desktop)
+if [ -n "$DM" ]; then
+  systemctl enable "$DM" 2>/dev/null || true
+  case "$DM" in
+    gdm)     mkdir -p /etc/gdm; printf '[daemon]\nAutomaticLoginEnable=true\nAutomaticLogin=%s\n' "$USR" > /etc/gdm/custom.conf ;;
+    sddm)    mkdir -p /etc/sddm.conf.d; printf '[Autologin]\nUser=%s\nSession=plasma\n' "$USR" > /etc/sddm.conf.d/autologin.conf ;;
+    lightdm) sed -i "s/^#\?autologin-user=.*/autologin-user=$USR/" /etc/lightdm/lightdm.conf 2>/dev/null || true
+             groupadd -f autologin; gpasswd -a "$USR" autologin ;;
+  esac
+fi
+# Bootloader (os-prober on so it finds Ubuntu etc.)
+sed -i 's/^#\?GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub 2>/dev/null || \
+  echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
+if [ "$FW" = "uefi" ]; then
+  grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=AIos --recheck
+else
+  grub-install --target=i386-pc --recheck "$DISK"
+fi
+grub-mkconfig -o /boot/grub/grub.cfg
+CHROOT
+[ $? -eq 0 ] || die "system configuration failed"
+
+step "Copying the AIos AI core onto the new system (works offline there too)"
+mkdir -p /mnt/usr/local/lib /mnt/etc /mnt/var/lib /mnt/opt
+cp -r /usr/local/lib/archspeech            /mnt/usr/local/lib/         2>/dev/null || true
+cp -r /usr/local/bin/archspeech* /usr/local/bin/aios-* /mnt/usr/local/bin/ 2>/dev/null || true
+cp -r /etc/archspeech /etc/keyd            /mnt/etc/                   2>/dev/null || true
+cp -r /etc/sudoers.d/archspeech            /mnt/etc/sudoers.d/         2>/dev/null || true
+cp -r /opt/archspeech                      /mnt/opt/                   2>/dev/null || true
+cp -r /var/lib/ollama                      /mnt/var/lib/               2>/dev/null || true   # the model — no re-download
+mkdir -p /mnt/root/.cache
+cp -r /root/.cache/whisper                 /mnt/root/.cache/           2>/dev/null || true
+arch-chroot /mnt chown -R ollama:ollama /var/lib/ollama 2>/dev/null || true
+# sysusers/tmpfiles for the archspeech user on the target
+cp /etc/sysusers.d/archspeech.conf  /mnt/etc/sysusers.d/  2>/dev/null || true
+cp /etc/tmpfiles.d/archspeech.conf  /mnt/etc/tmpfiles.d/  2>/dev/null || true
+arch-chroot /mnt systemd-sysusers 2>/dev/null || true
+
+step "Done — unmounting"
+umount -R /mnt 2>/dev/null || true
+
+cat <<DONE
+
+✓ AIos installed to $DISK ($DESKTOP, $MODE).
+  Login user: $USERNAME   password: $USERPASS  (you are auto-logged-in)
+  Remove the USB stick and reboot. After it boots into the desktop, the AI can
+  help you connect WiFi and upgrade to a stronger AI model.
+DONE
