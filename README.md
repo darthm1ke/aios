@@ -117,31 +117,27 @@ qemu-system-x86_64 -enable-kvm -m 4G -smp 4 \
 
 ---
 
-## First boot experience
+## First boot: what you will see
 
-```
-[ Boot ISO ]
+Booting the USB goes through three screens. Here is exactly what to expect so nothing looks alarming.
 
-  AIos greets you immediately via the local qwen2.5:1.5b (no API key, no internet)
+### 1. Boot messages (this is normal)
 
-  "What are you building? Tell me: desktop, gaming, server, dev, or pentest?"
+![AIos boot messages](docs/screenshots/01-boot-messages.png)
 
-  > gaming rig
+You will see a wall of text fly by, including many lines like `Invalid ELF header magic` and a couple of `systemd` warnings. This is completely normal and harmless. If the screen ever gets stuck here, just reboot and let it try again.
 
-  "Great. I can see /dev/sda (500GB). Use the whole disk?"
+### 2. The login screen (you are almost there)
 
-  > yes
+![AIos login screen](docs/screenshots/02-login.png)
 
-  [ installation runs - live log visible in bottom pane ]
+Once you reach this `aios login` screen, you are basically home free. It very rarely gets stuck here. Just be patient while the AI model loads into memory.
 
-  "Done. Remove the USB and reboot. Your AI is waiting."
+### 3. The AI is ready (you are done)
 
-[ First boot of installed system ]
+![AIos ready, AI dashboard](docs/screenshots/03-ready.png)
 
-  "I'm running on a local model right now.
-   Want to connect Claude or another AI for more power?
-   Hold Caps Lock to answer."
-```
+When you see this dashboard with the model showing `ready`, you are done. Hold `Caps Lock` and speak, and the AI will help you get online. From there it can install AIos onto your computer.
 
 ---
 
