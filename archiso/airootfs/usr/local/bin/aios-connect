@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# aios-connect — get the machine ONLINE (triggered by the AI, like aios-install).
+# aios-connect - get the machine ONLINE (triggered by the AI, like aios-install).
 # The offline model's whole job is to get connected; it just calls this with the
 # user's wifi name + password. Vetted commands, clear output the AI can read.
 #
@@ -26,7 +26,7 @@ case "$ACTION" in
     lspci 2>/dev/null | grep -iE 'network|ethernet' | sed 's/^/  /'
     lsusb 2>/dev/null | grep -iE 'wireless|wlan|wifi|ethernet' | sed 's/^/  /'
     if ! nmcli -t -f TYPE device status 2>/dev/null | grep -q '^wifi'; then
-      echo "  NOTE: no wifi device detected — use ethernet, or phone USB-tethering."
+      echo "  NOTE: no wifi device detected - use ethernet, or phone USB-tethering."
     fi
     online && echo ">> Already ONLINE." || echo ">> Currently OFFLINE."
     ;;
@@ -37,7 +37,7 @@ case "$ACTION" in
     sleep 1
     echo "── Nearby wifi networks ──"
     nmcli -f SSID,SIGNAL,SECURITY device wifi list 2>/dev/null | sed 's/^/  /' \
-      || echo "  (no wifi device / scan failed — try ethernet)"
+      || echo "  (no wifi device / scan failed - try ethernet)"
     ;;
 
   wifi)
@@ -53,13 +53,13 @@ case "$ACTION" in
       nmcli device wifi connect "$SSID"
     fi
     sleep 2
-    online && echo ">> ✓ ONLINE — connected to $SSID" \
+    online && echo ">> ✓ ONLINE - connected to $SSID" \
            || echo ">> ✗ connected to wifi but no internet yet (wrong password? captive portal?)"
     ;;
 
   ethernet)
     DEV="$(nmcli -t -f DEVICE,TYPE device status 2>/dev/null | awk -F: '$2=="ethernet"{print $1; exit}')"
-    [ -n "$DEV" ] || { echo "ERROR: no ethernet device found — plug in a cable, or use wifi"; exit 1; }
+    [ -n "$DEV" ] || { echo "ERROR: no ethernet device found - plug in a cable, or use wifi"; exit 1; }
     echo ">> Bringing up wired connection on $DEV..."
     nmcli device connect "$DEV" 2>/dev/null || true
     sleep 2

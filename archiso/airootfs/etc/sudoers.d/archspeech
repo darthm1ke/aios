@@ -1,6 +1,6 @@
-# ArchSpeech AI daemon — FULL privilege escalation (benchmark mode)
+# ArchSpeech AI daemon - FULL privilege escalation (benchmark mode)
 # The user wants the AI to have full control of the system for benchmarking.
-# This is safe on the live ISO because it runs in an ephemeral RAM overlay —
+# This is safe on the live ISO because it runs in an ephemeral RAM overlay -
 # a reboot wipes everything. Re-scope this to specific binaries before any
 # install-to-disk / production use.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AIos fast rebuild — wipes only the work directory, preserves all caches.
+# AIos fast rebuild - wipes only the work directory, preserves all caches.
 # Packages, model, and pip wheels are never re-downloaded.
 set -euo pipefail
 
@@ -27,7 +27,7 @@ echo "▶ Cleaning work directory..."
 
 LIVE=$(grep "$WORK" /proc/mounts 2>/dev/null | awk '{print $2}' | sort -r) || true
 if [ -n "$LIVE" ]; then
-    echo "  Found live mounts — detaching..."
+    echo "  Found live mounts - detaching..."
     echo "$LIVE" | xargs -I{} sudo umount -l {} 2>/dev/null || true
 fi
 
@@ -42,7 +42,7 @@ echo ""
 
 sudo mkarchiso -v -w "$WORK" -o "$OUT" "$PROFILE"
 
-# ── Clean old ISOs — keep only the latest ────────────────────────────────────
+# ── Clean old ISOs - keep only the latest ────────────────────────────────────
 LATEST=$(find "$OUT" -name "aios-*.iso" | sort -t- -k2 -V | tail -1)
 find "$OUT" -name "*.iso" ! -path "$LATEST" -delete 2>/dev/null || true
 
@@ -63,6 +63,6 @@ if [ -f "$ISO" ]; then
     echo "══════════════════════════════════════════════════════"
     echo ""
 else
-    echo "✗ Build failed — no aios-*.iso found in $OUT"
+    echo "✗ Build failed - no aios-*.iso found in $OUT"
     exit 1
 fi

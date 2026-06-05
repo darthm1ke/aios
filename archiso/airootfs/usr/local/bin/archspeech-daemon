@@ -130,11 +130,11 @@ Guidelines:
 - Always explain what you are about to do before executing commands.
 - Prefer safe, reversible operations. Warn before anything destructive.
 - When installing packages, use pacman first; yay only for AUR packages.
-- Keep responses concise — they may be spoken aloud via TTS.
+- Keep responses concise - they may be spoken aloud via TTS.
 - Execute multi-step tasks in order and report progress.
 - You run as the 'archspeech' system user with scoped sudo."""
 
-# Minimal prompt for local 0.6B model — keeps token count low for fast inference
+# Minimal prompt for local 0.6B model - keeps token count low for fast inference
 LOCAL_SYSTEM_PROMPT = "You are AIos, an AI assistant for Arch Linux. Give short, direct answers. For package installs use pacman. Be concise."
 
 
@@ -210,7 +210,7 @@ async def handle_openai_compatible(user_message: str, config: dict) -> str:
         {"role": "user",   "content": user_message}
     ]
 
-    # Some local models don't support tool calling — try with tools, fall back without
+    # Some local models don't support tool calling - try with tools, fall back without
     use_tools = config.get("tools_enabled", True)
 
     while True:
@@ -319,13 +319,13 @@ LOCAL_MODEL = "qwen2.5:1.5b"
 async def handle_local(user_message: str) -> str:
     """Use Ollama native /api/chat with minimal prompt for fast inference.
 
-    The model is baked into the ISO at /var/lib/ollama — there is NO pull and
+    The model is baked into the ISO at /var/lib/ollama - there is NO pull and
     NO network access here. If the model is somehow absent we fail gracefully
     rather than blocking the user with a download that can't happen offline.
     """
     import urllib.request as _ur, json as _json
 
-    # Always give the model the full command reference — it can't recall Arch
+    # Always give the model the full command reference - it can't recall Arch
     # commands reliably on its own at 0.5B, so the cheat sheets ARE its knowledge.
     system_content = LOCAL_SYSTEM_PROMPT + "\n\n=== COMMAND REFERENCE (use these exact commands) ===\n" + all_cheatsheets()
 
@@ -339,9 +339,9 @@ async def handle_local(user_message: str) -> str:
         "options": {
             "num_ctx":        4096,  # room for all cheat sheets (~1.2K tok) + reply
             "temperature":    0.4,   # lower temp keeps the tiny model coherent
-            "num_predict":    256,   # Cap output length — keeps responses fast and concise
+            "num_predict":    256,   # Cap output length - keeps responses fast and concise
             "repeat_penalty": 1.3,   # break degenerate repetition loops
-            "num_gpu":        0      # CPU only — GPU backends corrupt output on some iGPUs
+            "num_gpu":        0      # CPU only - GPU backends corrupt output on some iGPUs
         }
     }).encode()
 

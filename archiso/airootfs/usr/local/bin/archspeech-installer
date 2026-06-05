@@ -1,7 +1,7 @@
 #!/opt/archspeech/bin/python3
 """
 ArchAI Guided Installer
-AI is active from first screen — greets user, monitors installation,
+AI is active from first screen - greets user, monitors installation,
 catches errors and fixes them live on screen.
 """
 
@@ -29,11 +29,11 @@ BANNER = """
 """
 
 PROFILES = {
-    "1": {"key": "gaming",    "label": "Gaming rig",       "pitch": "Ditch Windows for good — Steam, Proton, GameMode, full KDE desktop", "script": PROFILES_DIR / "gaming.sh"},
-    "2": {"key": "server",    "label": "Home server",      "pitch": "Own your data — nginx, Docker, SSL, hardened SSH, no desktop bloat",  "script": PROFILES_DIR / "server.sh"},
-    "3": {"key": "hobby",     "label": "Hobby machine",    "pitch": "A bit of everything — GNOME, media, dev tools, no commitment",        "script": PROFILES_DIR / "hobby.sh"},
-    "4": {"key": "pentest",   "label": "Pentesting lab",   "pitch": "Built like a pro red-teamer — nmap, Metasploit, Wireshark, Tor, XFCE","script": PROFILES_DIR / "pentest.sh"},
-    "5": {"key": "developer", "label": "Dev workstation",  "pitch": "Ship things — KDE, VS Code, Docker, full language stack, databases",  "script": PROFILES_DIR / "developer.sh"},
+    "1": {"key": "gaming",    "label": "Gaming rig",       "pitch": "Ditch Windows for good - Steam, Proton, GameMode, full KDE desktop", "script": PROFILES_DIR / "gaming.sh"},
+    "2": {"key": "server",    "label": "Home server",      "pitch": "Own your data - nginx, Docker, SSL, hardened SSH, no desktop bloat",  "script": PROFILES_DIR / "server.sh"},
+    "3": {"key": "hobby",     "label": "Hobby machine",    "pitch": "A bit of everything - GNOME, media, dev tools, no commitment",        "script": PROFILES_DIR / "hobby.sh"},
+    "4": {"key": "pentest",   "label": "Pentesting lab",   "pitch": "Built like a pro red-teamer - nmap, Metasploit, Wireshark, Tor, XFCE","script": PROFILES_DIR / "pentest.sh"},
+    "5": {"key": "developer", "label": "Dev workstation",  "pitch": "Ship things - KDE, VS Code, Docker, full language stack, databases",  "script": PROFILES_DIR / "developer.sh"},
 }
 
 
@@ -70,7 +70,7 @@ async def ask_ai(message: str) -> str:
         return f"[AI offline: {e}]"
 
 def ai_say(message: str) -> str:
-    """Synchronous AI call — blocks until response."""
+    """Synchronous AI call - blocks until response."""
     try:
         loop = asyncio.new_event_loop()
         response = loop.run_until_complete(ask_ai(message))
@@ -85,7 +85,7 @@ def ai_say(message: str) -> str:
 _voice_queue: list[str] = []
 
 def _voice_reader():
-    """Background thread — reads voice transcripts from PTT daemon FIFO."""
+    """Background thread - reads voice transcripts from PTT daemon FIFO."""
     try:
         if not VOICE_FIFO.exists():
             os.mkfifo(str(VOICE_FIFO))
@@ -98,7 +98,7 @@ def _voice_reader():
         pass
 
 def get_input(prompt: str) -> str:
-    """Read from keyboard OR voice pipe — whichever comes first."""
+    """Read from keyboard OR voice pipe - whichever comes first."""
     print(f"\033[0;36m  {prompt}\033[0m ", end="", flush=True)
     # Start voice reader thread if not running
     if not any(t.name == "voice" for t in threading.enumerate()):
@@ -154,7 +154,7 @@ def detect_ram_gb() -> int:
 def choose_profile() -> dict:
     print("\n\033[1;37m  What are you building? Pick the closest match:\033[0m\n")
     for num, p in PROFILES.items():
-        print(f"  \033[1;36m{num})\033[0m \033[1;37m{p['label']:<22}\033[0m \033[0;90m— {p['pitch']}\033[0m")
+        print(f"  \033[1;36m{num})\033[0m \033[1;37m{p['label']:<22}\033[0m \033[0;90m- {p['pitch']}\033[0m")
     print()
 
     while True:
@@ -248,7 +248,7 @@ async def run_install(profile: dict, disk: str, username: str, timezone: str,
         return False
 
     if not ai_available():
-        # No AI — ask the user directly
+        # No AI - ask the user directly
         speak("Installation failed.")
         print("  \033[0;36mRetry or go back to menu? (retry/menu):\033[0m ", end="", flush=True)
         return input().strip().lower() == "retry"
@@ -263,10 +263,10 @@ async def run_install(profile: dict, disk: str, username: str, timezone: str,
         f"Error output:\n{error_context}\n\n"
         f"Instructions:\n"
         f"1. Use run_shell_command to investigate (lsblk, cat /proc/partitions, dmesg | tail, etc.)\n"
-        f"2. Use run_shell_command to fix the issue — unmount stuck mounts, fix partition names, "
+        f"2. Use run_shell_command to fix the issue - unmount stuck mounts, fix partition names, "
         f"   clean up /mnt, or whatever the error requires.\n"
         f"3. After fixing, reply with a ONE sentence summary of what you fixed.\n"
-        f"4. Do NOT re-run the full install script — just fix the underlying issue so retry will work.\n"
+        f"4. Do NOT re-run the full install script - just fix the underlying issue so retry will work.\n"
         f"Be direct. Execute fixes immediately."
     )
 
@@ -306,7 +306,7 @@ async def main():
     ram = detect_ram_gb()
     print(f"\033[0;90m  Detected: {gpu} GPU  │  {ram}GB RAM\033[0m\n")
 
-    # AI greeting — only if daemon is reachable
+    # AI greeting - only if daemon is reachable
     if Path(SOCKET_PATH).exists():
         print(f"\033[1;36m  AI:\033[0m ", end="", flush=True)
         greeting = await ask_ai(
@@ -314,12 +314,12 @@ async def main():
             f"User hardware: {gpu} GPU, {ram}GB RAM. "
             "Say one sentence only: confirm hardware looks good and tell them to pick a profile below. "
             "Do NOT say 'Have a nice day' or any farewell. Do NOT ask questions. "
-            "End with nothing — the profile menu appears next."
+            "End with nothing - the profile menu appears next."
         )
         print(f"\033[0;37m{greeting}\033[0m\n")
         speak(greeting)
     else:
-        print(f"\033[0;90m  AI layer loading — using text mode. Voice activates when ready.\033[0m\n")
+        print(f"\033[0;90m  AI layer loading - using text mode. Voice activates when ready.\033[0m\n")
 
     while True:
         profile = choose_profile()
@@ -351,7 +351,7 @@ async def main():
   This will erase {disk}. Type GO to start:\033[0m """, end="", flush=True)
 
         if input().strip() != "GO":
-            print("  Cancelled — going back to menu.\n")
+            print("  Cancelled - going back to menu.\n")
             continue
 
         speak(f"Installing your {profile['label']}. I'll tell you if anything goes wrong.")
@@ -364,7 +364,7 @@ async def main():
         done_msg = await ask_ai(
             f"The {profile['key']} profile installed successfully. "
             "Tell the user in one sentence: remove USB and reboot. "
-            "Be brief — this will be spoken aloud."
+            "Be brief - this will be spoken aloud."
         )
         print(f"\n  \033[1;32m✓ Installation complete.\033[0m")
         ai_print(done_msg)

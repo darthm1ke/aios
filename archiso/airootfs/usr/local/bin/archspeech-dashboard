@@ -1,7 +1,7 @@
 #!/opt/archspeech/bin/python3
 """
-AIos Dashboard — ANSI-based, works on VGA console, X11, Wayland, SSH.
-No curses dependency — pure escape codes for maximum compatibility.
+AIos Dashboard - ANSI-based, works on VGA console, X11, Wayland, SSH.
+No curses dependency - pure escape codes for maximum compatibility.
 
 Rendering: cursor-home overwrite (NOT full-screen clear) so the console never
 flickers and typing is never swallowed. Terminal size comes from a cheap ioctl
@@ -67,10 +67,10 @@ def cheats(*names):
     return "\n\n".join(parts)
 
 # ── Two missions, chosen by whether we're online ─────────────────────────────
-# OFFLINE: the tiny model has ONE job — get the computer online. Nothing else.
+# OFFLINE: the tiny model has ONE job - get the computer online. Nothing else.
 CONNECT_PROMPT = (
     "You are AIos, the AI on a live USB. The computer is OFFLINE. Your ONE and ONLY "
-    "job right now is to GET IT ONLINE — do not talk about installing yet. Use the "
+    "job right now is to GET IT ONLINE - do not talk about installing yet. Use the "
     "vetted 'aios-connect' helper (never hand-write nmcli). Steps: run "
     "'aios-connect status' to see the hardware, 'aios-connect scan' to list wifi, "
     "then ask the user for their wifi NAME and PASSWORD and run "
@@ -78,21 +78,21 @@ CONNECT_PROMPT = (
     "them to plug in ethernet and run 'aios-connect ethernet'. Run 'aios-connect "
     "check' to confirm. The moment it says ONLINE, tell the user: \"You're online! "
     "Now I can upgrade to a smarter AI and install your system.\"\n\n"
-    "Put each command ALONE in a fenced bash block — it runs as root and you get the "
+    "Put each command ALONE in a fenced bash block - it runs as root and you get the "
     "output back. Run ONE command, read it, then decide the next. Be concise.\n\n"
     "=== COMMAND REFERENCE ===\n" + cheats("networking.md")
 )
 # ONLINE: now installing is the job, on rails.
 INSTALL_PROMPT = (
     "You are AIos, and the computer is ONLINE. Install the OS ON RAILS: figure out "
-    "which EXPERIENCE the user wants — desktop, gaming, server, developer, or pentest "
-    "(match their words to ONE of those exact names) — ask which disk (run "
+    "which EXPERIENCE the user wants - desktop, gaming, server, developer, or pentest "
+    "(match their words to ONE of those exact names) - ask which disk (run "
     "'lsblk -dno NAME,SIZE,MODEL') and wipe-or-alongside. Then run "
     "'aios-install --experience X --disk Y --mode Z'. You do NOT choose packages or a "
     "desktop. ALWAYS run WITHOUT --yes first to show the plan, let the user confirm, "
     "THEN run again with --yes.\n\n"
     "Put each command ALONE in a fenced bash block (runs as root, you get the output). "
-    "NEVER hand-write parted/pacstrap — only use aios-install. Be concise.\n\n"
+    "NEVER hand-write parted/pacstrap - only use aios-install. Be concise.\n\n"
     "=== COMMAND REFERENCE ===\n" + cheats("install.md", "packages.md")
 )
 
@@ -154,7 +154,7 @@ def hw_thread():
             rt = info.get("MemTotal",0)//1024
             ru = rt - info.get("MemAvailable",0)//1024
             with SL: S["ram_used"] = ru; S["ram_total"] = rt
-            # Volume via amixer is a subprocess spawn — poll it only every ~5s,
+            # Volume via amixer is a subprocess spawn - poll it only every ~5s,
             # not every second, so it never competes with the input loop.
             hw_thread.tick = getattr(hw_thread, "tick", 0) + 1
             if hw_thread.tick % 5 == 1:
@@ -185,7 +185,7 @@ def hw_thread():
 def mic_thread():
     """The PTT daemon is the SOLE owner of the mic (a raw ALSA device is
     single-client) and publishes the live level to /run/archspeech/mic_level.
-    We just read that file — no contention with the PTT's recording."""
+    We just read that file - no contention with the PTT's recording."""
     lp = Path("/run/archspeech/mic_level")
     while True:
         try:
@@ -241,7 +241,7 @@ def _chat_stream(convo):
 def extract_commands(text):
     """Pull executable command lines out of ```bash fenced code blocks."""
     cmds = []
-    # Require an explicit bash/sh tag — untagged ``` blocks are usually the
+    # Require an explicit bash/sh tag - untagged ``` blocks are usually the
     # model showing example OUTPUT, not commands to run. Don't execute those.
     for block in re.findall(r"```(?:bash|sh|shell|console)\s*\n?(.*?)```", text, re.S):
         for line in block.splitlines():
@@ -279,7 +279,7 @@ def run_ai(msg):
             cmds = extract_commands(text)
             if not cmds:
                 if not S["ai_partial"].strip():
-                    _emit("(no response — try rephrasing)")
+                    _emit("(no response - try rephrasing)")
                 break
             results = []
             for cmd in cmds:
@@ -392,7 +392,7 @@ def render(messages, input_buf, busy):
 
     # ── Input bar ─────────────────────────────────────────────────────────────
     if busy:
-        out.append((dim("  (AI is responding — please wait)"))[:cols+20])
+        out.append((dim("  (AI is responding - please wait)"))[:cols+20])
     else:
         out.append(("  You: " + input_buf)[:cols])
     if pst:
@@ -416,7 +416,7 @@ async def main():
     threading.Thread(target=voice_thread, daemon=True).start()
 
     if not ai_available():
-        messages = [("AI", "Starting up — the model is loading, one moment...")]
+        messages = [("AI", "Starting up - the model is loading, one moment...")]
     else:
         try:
             _onln = bool(subprocess.run(["ip","route","show","default"],
@@ -424,9 +424,9 @@ async def main():
         except Exception:
             _onln = False
         if _onln:
-            messages = [("AI", "I'm online and ready. What kind of system do you want to install — desktop, gaming, server, developer, or pentest?")]
+            messages = [("AI", "I'm online and ready. What kind of system do you want to install - desktop, gaming, server, developer, or pentest?")]
         else:
-            messages = [("AI", "Hi, I'm AIos. First let's get you online — tell me your WiFi network name and password, or plug in an ethernet cable.")]
+            messages = [("AI", "Hi, I'm AIos. First let's get you online - tell me your WiFi network name and password, or plug in an ethernet cable.")]
 
     input_buf = ""
     os.system("tput civis 2>/dev/null")               # hide cursor
@@ -437,7 +437,7 @@ async def main():
     import termios, tty
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
-    tty.setraw(fd)                 # raw ONCE — toggling it every frame raced with input
+    tty.setraw(fd)                 # raw ONCE - toggling it every frame raced with input
     last_render = 0.0
     dirty = True                   # repaint flag: set on any state change
     try:
@@ -474,7 +474,7 @@ async def main():
                 dirty = True       # keep the stream visibly updating
 
             # Repaint only when something changed, while streaming, or every 0.4s
-            # for the live stats — NOT 6×/second. This is what stops the refresh
+            # for the live stats - NOT 6×/second. This is what stops the refresh
             # from fighting your typing.
             now = time.monotonic()
             if dirty or busy or (now - last_render) >= 0.4:

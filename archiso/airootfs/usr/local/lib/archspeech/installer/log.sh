@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Logging helpers — writes to execution log visible in the bottom tmux pane
+# Logging helpers - writes to execution log visible in the bottom tmux pane
 
 LOG="/var/log/archspeech/execution.log"
 START_TIME=$(date +%s)
@@ -28,7 +28,7 @@ log_progress() {
     local empty=$(( 25 - filled ))
     local bar
     bar="$(printf '%0.s█' $(seq 1 $filled))$(printf '%0.s░' $(seq 1 $empty))"
-    echo "  ${bar}  ${pct}% — ${msg}" >> "$LOG"
+    echo "  ${bar}  ${pct}% - ${msg}" >> "$LOG"
 }
 
 run_logged() {

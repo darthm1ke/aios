@@ -14,7 +14,7 @@ else
     /opt/archspeech/bin/pip install --quiet anthropic openai
 fi
 
-# No llama-cpp-python — Ollama handles local inference with automatic
+# No llama-cpp-python - Ollama handles local inference with automatic
 # GPU detection (Vulkan, CPU). Pre-compiled, no chroot build issues.
 #
 # The qwen2.5:1.5b model store is baked into /var/lib/ollama at build time
@@ -23,7 +23,7 @@ fi
 
 # ── Enable core services ──────────────────────────────────────────────────────
 systemctl enable ollama.service
-systemctl enable aios-model-init.service     # offline warmup — no network, no pull
+systemctl enable aios-model-init.service     # offline warmup - no network, no pull
 systemctl enable archspeech.service
 systemctl enable archspeech-ptt.service       # Caps Lock push-to-talk (evdev + espeak-ng)
 systemctl enable keyd.service
@@ -31,7 +31,7 @@ systemctl enable NetworkManager.service
 
 # ── Offline-first: never block boot waiting for a network ─────────────────────
 # On a machine with no internet, network-online.target would otherwise stall
-# boot until systemd-networkd-wait-online times out — delaying the AI by up to
+# boot until systemd-networkd-wait-online times out - delaying the AI by up to
 # two minutes. We don't need synchronous network for the local model, so mask
 # the wait. Cloud backends still work: the daemon connects lazily once NM is up.
 systemctl mask systemd-networkd-wait-online.service 2>/dev/null || true

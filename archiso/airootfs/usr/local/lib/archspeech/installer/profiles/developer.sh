@@ -12,7 +12,7 @@ DEV_PACKAGES="code docker docker-compose nodejs npm python python-pip rustup go 
   postgresql redis mariadb sqlite httpie jq github-cli"
 ARCHAI_PACKAGES="espeak-ng tmux keyd alsa-utils pipewire pipewire-pulse wireplumber"
 
-log_info "Developer profile — KDE + VS Code + Docker + full language stack"
+log_info "Developer profile - KDE + VS Code + Docker + full language stack"
 log_progress 0 "Building your dev workstation"
 
 parted -s "$DISK" mklabel gpt \

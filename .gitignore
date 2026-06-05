@@ -2,21 +2,21 @@
 build/
 work/
 
-# Package and model caches (too large for git — run scripts/fetch-deps.sh)
+# Package and model caches (too large for git - run scripts/fetch-deps.sh)
 pkg-cache/
 archiso/airootfs/usr/local/lib/archspeech/models/*.gguf
 archiso/airootfs/usr/local/lib/archspeech/wheels/
 
-# Secrets (only ignore if it contains real API keys — default config is safe to commit)
+# Secrets (only ignore if it contains real API keys - default config is safe to commit)
 
 # Test VM disk and logs
 archai-test.qcow2
 aios-boot.log
 
-# Ollama model store — baked into the ISO by fetch-deps.sh, too large for git (>100MB)
+# Ollama model store - baked into the ISO by fetch-deps.sh, too large for git (>100MB)
 archiso/airootfs/var/lib/ollama/
 archiso/airootfs/usr/local/lib/archspeech/ollama/
-# Whisper STT model — baked into the ISO by fetch-deps.sh
+# Whisper STT model - baked into the ISO by fetch-deps.sh
 archiso/airootfs/root/.cache/
 
 # OS

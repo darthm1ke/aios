@@ -14,21 +14,21 @@ mkdir -p "$OLLAMA_DIR" "$WHISPER_DIR" "$WHEELS_DIR" "$PKG_CACHE"
 
 echo ""
 echo "══════════════════════════════════════════"
-echo "  ArchAI — one-time dependency fetch"
+echo "  ArchAI - one-time dependency fetch"
 echo "══════════════════════════════════════════"
 echo ""
 
-# ── Qwen2.5 0.5B — baked into the ISO Ollama store (~400MB) ─────────────────
+# ── Qwen2.5 0.5B - baked into the ISO Ollama store (~400MB) ─────────────────
 # No sudo, no system service: we run a throwaway user-space Ollama with
 # OLLAMA_MODELS pointed straight at the airootfs tree, so `ollama pull` writes
 # the blob store EXACTLY where the ISO expects it (/var/lib/ollama). On the
-# live system Ollama already has the model — no pull, no USB, works offline and
+# live system Ollama already has the model - no pull, no USB, works offline and
 # survives install-to-disk. customize_airootfs.sh chowns it to ollama at build.
 if [ -f "$OLLAMA_DIR/manifests/registry.ollama.ai/library/qwen2.5/1.5b" ]; then
     echo "✓ qwen2.5:1.5b already baked into airootfs ($(du -sh "$OLLAMA_DIR" | cut -f1))"
 else
     if ! command -v ollama >/dev/null; then
-        echo "✗ ollama not installed on build host — install it: sudo pacman -S ollama"
+        echo "✗ ollama not installed on build host - install it: sudo pacman -S ollama"
         exit 1
     fi
     echo "▶ Starting a throwaway user-space Ollama (models -> airootfs)..."
@@ -45,11 +45,11 @@ else
     kill $FETCH_OLLAMA_PID 2>/dev/null || true
     trap - EXIT
     if [ ! -f "$OLLAMA_DIR/manifests/registry.ollama.ai/library/qwen2.5/1.5b" ]; then
-        echo "✗ Pull did not land in $OLLAMA_DIR — see /tmp/aios-ollama-fetch.log"
+        echo "✗ Pull did not land in $OLLAMA_DIR - see /tmp/aios-ollama-fetch.log"
         exit 1
     fi
     chmod -R a+rX "$OLLAMA_DIR"
-    echo "✓ Baked into $OLLAMA_DIR — $(du -sh "$OLLAMA_DIR" | cut -f1)"
+    echo "✓ Baked into $OLLAMA_DIR - $(du -sh "$OLLAMA_DIR" | cut -f1)"
 fi
 
 # ── pip wheels (pure-Python packages only, cached as wheels) ─────────────────
@@ -61,10 +61,10 @@ pip download \
     anthropic openai
 echo "✓ Pip wheels cached ($(ls "$WHEELS_DIR" | wc -l) files)"
 
-# evdev: installed via pacman (python-evdev) — no pip wheel needed
-# llama-cpp-python: compiles from source — pip caches the build automatically
+# evdev: installed via pacman (python-evdev) - no pip wheel needed
+# llama-cpp-python: compiles from source - pip caches the build automatically
 
-# ── Whisper base model (~142MB) — baked into the ISO ──────────────────────────
+# ── Whisper base model (~142MB) - baked into the ISO ──────────────────────────
 # PTT runs as root and calls `whisper --download-root /root/.cache/whisper`, so
 # we stage base.pt right there in the airootfs. No internet needed at boot.
 WHISPER_MODEL="$WHISPER_DIR/base.pt"

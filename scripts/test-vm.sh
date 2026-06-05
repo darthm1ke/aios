@@ -4,7 +4,7 @@ ISO=$(find "$PROJECT/build" -name "*.iso" | sort | tail -1)
 DISK="$PROJECT/archai-test.qcow2"
 
 if [ ! -f "$ISO" ]; then
-    echo "✗ No ISO found in $PROJECT/build/ — run rebuild.sh first"
+    echo "✗ No ISO found in $PROJECT/build/ - run rebuild.sh first"
     exit 1
 fi
 
@@ -33,7 +33,7 @@ echo ""
 export PULSE_SERVER="unix:$PULSE_SOCK"
 
 LOG="$PROJECT/aios-boot.log"
-# Always start fresh — clear previous boot log so it only contains latest session
+# Always start fresh - clear previous boot log so it only contains latest session
 > "$LOG"
 echo "  Serial: all kernel + systemd output → this terminal AND $LOG"
 echo ""

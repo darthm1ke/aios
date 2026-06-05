@@ -13,7 +13,7 @@ BASE_PACKAGES="base base-devel linux618 linux618-headers linux-firmware networkm
 SERVER_PACKAGES="nginx certbot certbot-nginx docker docker-compose fail2ban ufw python python-pip"
 ARCHAI_PACKAGES="espeak-ng tmux keyd alsa-utils python-pip"
 
-log_info "Server profile — nginx, Docker, SSL, hardened SSH, firewall"
+log_info "Server profile - nginx, Docker, SSL, hardened SSH, firewall"
 log_progress 0 "Starting home server installation"
 
 parted -s "$DISK" mklabel gpt \

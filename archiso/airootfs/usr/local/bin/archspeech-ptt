@@ -1,13 +1,13 @@
 #!/opt/archspeech/bin/python3
 """
-ArchSpeech Push-to-Talk daemon — SOLE OWNER of the microphone.
+ArchSpeech Push-to-Talk daemon - SOLE OWNER of the microphone.
 
 Why this version: a raw ALSA capture device (plughw) is single-client. If the
 dashboard meters the mic continuously AND this daemon tries to open it to
 record, the second one is blocked ("device busy") and records silence. So this
 daemon is the ONLY process that opens the mic: it reads one continuous arecord
 stream, always publishes the live level (for the dashboard bar) to
-/run/archspeech/mic_level, and — while a PTT key is held — also buffers the
+/run/archspeech/mic_level, and - while a PTT key is held - also buffers the
 audio, then transcribes it on release.
 
 Keys: Caps Lock (keyd remaps it to F13) and Right Ctrl.
@@ -100,14 +100,14 @@ def load_whisper():
         import whisper
         status("loading Whisper (offline)...")
         _WHISPER = whisper.load_model(WHISPER_SIZE, download_root=WHISPER_CACHE)
-        status("ready — hold Caps Lock to talk")
+        status("ready - hold Caps Lock to talk")
     except Exception as e:
         status(f"Whisper load FAILED: {str(e)[:70]}")
         _WHISPER = None
 
 def transcribe(raw):
     """Transcribe raw S16_LE mono PCM. We feed Whisper a NumPy float32 array
-    directly — NOT a WAV path — so we never invoke Whisper's file loader, which
+    directly - NOT a WAV path - so we never invoke Whisper's file loader, which
     shells out to ffmpeg (not installed). Fully offline, no ffmpeg dependency."""
     raw = raw[: len(raw) // 2 * 2]                      # ensure 16-bit aligned
     audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
@@ -157,10 +157,10 @@ async def watch(kbd):
             beep(440, 80)
             level = rms16(raw)
             if len(raw) < RATE or level < SILENCE_RMS:   # <0.5s or silent
-                status(f"silence (level {level}) — hold the key WHILE speaking")
+                status(f"silence (level {level}) - hold the key WHILE speaking")
                 continue
             if _WHISPER is None:
-                status("Whisper not loaded — STT unavailable (see ptt.log)")
+                status("Whisper not loaded - STT unavailable (see ptt.log)")
                 continue
             status(f"transcribing ({level})...")
             try:
@@ -172,7 +172,7 @@ async def watch(kbd):
             if text:
                 status(f"heard: {text}"); to_ui(text)
             else:
-                status("heard nothing clear — speak louder/closer, then retry")
+                status("heard nothing clear - speak louder/closer, then retry")
 
 async def main():
     status(f"capture device {DEVICE} (card {CARD})")
@@ -181,7 +181,7 @@ async def main():
     load_whisper()
     kbs = find_keyboards()
     if not kbs:
-        status("no PTT keyboard found (F13/Right Ctrl) — keyd running?")
+        status("no PTT keyboard found (F13/Right Ctrl) - keyd running?")
         while True:
             await asyncio.sleep(5)
     await asyncio.gather(*[watch(k) for k in kbs])

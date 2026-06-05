@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# aios-install — AIos installer "on rails" (triggered by the AI).
+# aios-install - AIos installer "on rails" (triggered by the AI).
 #
 # The AI does NOT write commands. It picks an EXPERIENCE (a pre-baked recipe) and
 # a disk, then runs this. Each experience bundles the full package set, desktop,
-# services and drivers — vetted, so a tiny model can't get it wrong.
+# services and drivers - vetted, so a tiny model can't get it wrong.
 # SAFE BY DEFAULT: prints the plan and changes nothing unless --yes is given.
 #
 # Usage:
@@ -48,7 +48,7 @@ done
 [ -b "$DISK" ]       || die "$DISK is not a block device"
 case "$MODE" in wipe|alongside) ;; *) die "--mode must be wipe or alongside" ;; esac
 
-# ── EXPERIENCE rails — the pre-baked recipes ──────────────────────────────────
+# ── EXPERIENCE rails - the pre-baked recipes ──────────────────────────────────
 # Each sets: default desktop, extra app/tool packages, services to enable,
 # whether it needs 32-bit (multilib) and GPU drivers.
 MULTILIB="no"; WANT_GPU="no"; EXTRA_PKGS=""; EXTRA_SVCS=""; DEF_DESKTOP=""
@@ -87,7 +87,7 @@ case "$DESKTOP" in
   minimal) DE_PKGS="";                                                             DM=""        ;;
 esac
 
-# ── GPU drivers (gaming) — detect once, on the live system ────────────────────
+# ── GPU drivers (gaming) - detect once, on the live system ────────────────────
 GPU_PKGS=""
 if [ "$WANT_GPU" = "yes" ]; then
   if   lspci 2>/dev/null | grep -qiE 'VGA.*NVIDIA';        then GPU_PKGS="nvidia nvidia-utils lib32-nvidia-utils"
@@ -120,7 +120,7 @@ PLAN
 
 if [ "$DO_IT" -ne 1 ]; then
   echo ""
-  echo "This was a DRY RUN — nothing was changed."
+  echo "This was a DRY RUN - nothing was changed."
   echo "If the user confirms, run the exact same command again with --yes added."
   exit 0
 fi
@@ -169,7 +169,7 @@ if [ "$FW" = "uefi" ]; then
   mount "$PART_EFI" /mnt/boot/efi || die "mount EFI failed"
 fi
 
-step "Installing the '$EXPERIENCE' experience (downloads packages — be patient)"
+step "Installing the '$EXPERIENCE' experience (downloads packages - be patient)"
 # shellcheck disable=SC2086
 pacstrap /mnt $BASE_PKGS $DE_PKGS $EXTRA_PKGS $GPU_PKGS $AI_PKGS || die "pacstrap failed"
 genfstab -U /mnt >> /mnt/etc/fstab
@@ -223,7 +223,7 @@ cp -r /usr/local/bin/archspeech* /usr/local/bin/aios-* /mnt/usr/local/bin/ 2>/de
 cp -r /etc/archspeech /etc/keyd            /mnt/etc/                   2>/dev/null || true
 cp -r /etc/sudoers.d/archspeech            /mnt/etc/sudoers.d/         2>/dev/null || true
 cp -r /opt/archspeech                      /mnt/opt/                   2>/dev/null || true
-cp -r /var/lib/ollama                      /mnt/var/lib/               2>/dev/null || true   # the model — no re-download
+cp -r /var/lib/ollama                      /mnt/var/lib/               2>/dev/null || true   # the model - no re-download
 mkdir -p /mnt/root/.cache
 cp -r /root/.cache/whisper                 /mnt/root/.cache/           2>/dev/null || true
 arch-chroot /mnt chown -R ollama:ollama /var/lib/ollama 2>/dev/null || true
@@ -231,12 +231,12 @@ cp /etc/sysusers.d/archspeech.conf  /mnt/etc/sysusers.d/  2>/dev/null || true
 cp /etc/tmpfiles.d/archspeech.conf  /mnt/etc/tmpfiles.d/  2>/dev/null || true
 arch-chroot /mnt systemd-sysusers 2>/dev/null || true
 
-step "Done — unmounting"
+step "Done - unmounting"
 umount -R /mnt 2>/dev/null || true
 
 cat <<DONE
 
-✓ AIos installed to $DISK — '$EXPERIENCE' experience ($DESKTOP, $MODE).
+✓ AIos installed to $DISK - '$EXPERIENCE' experience ($DESKTOP, $MODE).
   Login user: $USERNAME   password: $USERPASS  (you are auto-logged-in)
   Remove the USB stick and reboot. After it boots, the AI can help you connect
   WiFi and upgrade to a stronger AI model.

@@ -42,7 +42,7 @@ man-pages
 
 # --- Local AI inference (CPU-only for maximum hardware compatibility) ---
 # Plain CPU Ollama. GPU backends (vulkan/cuda/rocm) produced corrupted
-# token-salad output on some integrated GPUs — a 0.5B model runs fine on CPU
+# token-salad output on some integrated GPUs - a 0.5B model runs fine on CPU
 # in a few seconds and is deterministic on ANY machine, which is the whole
 # point of this distro. No GPU driver lottery, no troubleshooting.
 ollama

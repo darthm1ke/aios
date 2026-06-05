@@ -1,16 +1,16 @@
-# ArchSpeech — Project Kickoff Notes
+# ArchSpeech - Project Kickoff Notes
 
 ## The Vision
 A custom Arch-based Linux distro with AI + voice control baked into the core.
-Not a plugin — a first-class system layer that manages the OS through natural
+Not a plugin - a first-class system layer that manages the OS through natural
 voice/text commands: packages, configs, services, VHosts, SSL, logs, and more.
 
 ---
 
 ## Three Core Modules
-1. **Arch base system** — built and packaged via `archiso`
-2. **AI API layer** — cloud (Claude/Anthropic) first, local (Ollama) in v2
-3. **Voice command module** — Whisper.cpp (STT) + Piper (TTS)
+1. **Arch base system** - built and packaged via `archiso`
+2. **AI API layer** - cloud (Claude/Anthropic) first, local (Ollama) in v2
+3. **Voice command module** - Whisper.cpp (STT) + Piper (TTS)
 
 ---
 
@@ -21,7 +21,7 @@ voice/text commands: packages, configs, services, VHosts, SSL, logs, and more.
   model support comes in v2.
 - **AI daemon starts on first boot** via systemd unit in `airootfs/etc/systemd/system/`.
 - The same ISO built with `archiso` is both the test artifact and the
-  distributable — no separate production build step.
+  distributable - no separate production build step.
 
 ---
 
@@ -34,7 +34,7 @@ The AI daemon runs as a dedicated system user (`archspeech`) with scoped
 - File ownership in system paths (`/etc`, `/var/www`, `/srv`)
 
 This gives the seamless, no-friction experience without blanket root access.
-Users can audit exactly what ArchSpeech is allowed to touch — a trust feature,
+Users can audit exactly what ArchSpeech is allowed to touch - a trust feature,
 not a limitation.
 
 ---
@@ -51,12 +51,12 @@ not a limitation.
 
 ## Next Steps (resume here on home network)
 
-### Step 1 — Install archiso
+### Step 1 - Install archiso
 ```bash
 sudo pacman -S archiso
 ```
 
-### Step 2 — Scaffold the project structure
+### Step 2 - Scaffold the project structure
 Claude will generate all files for this layout:
 ```
 archspeech/
@@ -75,9 +75,9 @@ archspeech/
 │   └── efiboot/ + syslinux/
 ```
 
-### Step 3 — Build and test the base ISO in a VM
-### Step 4 — Add the AI API daemon layer + sudoers config
-### Step 5 — Add the voice module (Whisper.cpp + Piper)
+### Step 3 - Build and test the base ISO in a VM
+### Step 4 - Add the AI API daemon layer + sudoers config
+### Step 5 - Add the voice module (Whisper.cpp + Piper)
 
 ---
 

@@ -15,7 +15,7 @@
 
 ## What is ArchAI?
 
-ArchAI is an Arch-based Linux distribution with AI baked into its core — not as an app, not as a plugin, but as a first-class system layer that manages your OS through voice or text commands.
+ArchAI is an Arch-based Linux distribution with AI baked into its core - not as an app, not as a plugin, but as a first-class system layer that manages your OS through voice or text commands.
 
 No command line mastery required. No copy-pasting from Stack Overflow. No reading through pages of documentation after a broken update.
 
@@ -26,7 +26,7 @@ You just talk to it.
 ## Features
 
 ### Hold Caps Lock. Talk. Done.
-Caps Lock is your push-to-talk key. Press and hold — the LED lights up, you're live. Release — the AI responds and executes. Works in a TTY, under X11, under Wayland, in a VM, anywhere. Implemented at the `evdev` level, below any display server.
+Caps Lock is your push-to-talk key. Press and hold - the LED lights up, you're live. Release - the AI responds and executes. Works in a TTY, under X11, under Wayland, in a VM, anywhere. Implemented at the `evdev` level, below any display server.
 
 ### AI layer that actually does things
 The AI daemon connects to your preferred provider and has scoped `sudo` access to manage:
@@ -37,31 +37,31 @@ The AI daemon connects to your preferred provider and has scoped `sudo` access t
 - File management in system paths
 
 ### Always-on local AI, fully offline
-**qwen2.5:1.5b** runs locally on CPU, baked into the ISO — no internet, no GPU, no
+**qwen2.5:1.5b** runs locally on CPU, baked into the ISO - no internet, no GPU, no
 API key. It loads at boot and stays resident, so it answers instantly. It's the
 AI from the very first second you boot the USB, before you've connected to
 anything. (CPU-only on purpose: GPU backends produced corrupted output on some
-hardware — deterministic CPU inference works on any machine.)
+hardware - deterministic CPU inference works on any machine.)
 
 ### Install "on rails"
 Boot the ISO, the AI greets you, helps you get online, then installs your chosen
-**experience** — you just say which one, and a vetted recipe does the rest:
+**experience** - you just say which one, and a vetted recipe does the rest:
 
 | Experience | What you get |
 |---|---|
-| 🖥️ **desktop** | GNOME (Wayland) + Firefox + media + office — a normal computer |
+| 🖥️ **desktop** | GNOME (Wayland) + Firefox + media + office - a normal computer |
 | 🎮 **gaming** | KDE + Steam + Lutris + Wine + GameMode + auto-detected GPU driver |
-| 🗄️ **server** | No desktop — SSH + Docker + nginx + firewall, headless |
+| 🗄️ **server** | No desktop - SSH + Docker + nginx + firewall, headless |
 | 💻 **developer** | KDE + VS Code + Docker + Node/Python/Rust/Go |
 | 🔒 **pentest** | XFCE + nmap + Wireshark + aircrack-ng + john + sqlmap |
 
 ### Live execution log
-A split tmux interface shows what the AI is executing in real time — no black box, no guessing. Works in pure TTY, no desktop required.
+A split tmux interface shows what the AI is executing in real time - no black box, no guessing. Works in pure TTY, no desktop required.
 
 ### Multi-provider AI support
 | Provider | Notes |
 |---|---|
-| **Claude (Anthropic)** | Recommended — best reasoning |
+| **Claude (Anthropic)** | Recommended - best reasoning |
 | **OpenAI** | GPT-4o and variants |
 | **Ollama** | Local models, no internet |
 | **LM Studio** | Local via LM Studio server |
@@ -72,12 +72,12 @@ A split tmux interface shows what the AI is executing in real time — no black 
 
 ## Build it yourself
 
-**Yes — anyone can clone this repo and build the exact same ISO.** The complete
+**Yes - anyone can clone this repo and build the exact same ISO.** The complete
 recipe is in git. The large binaries (the AI model, the speech model, pip
-wheels) are **not** committed — they'd blow past GitHub's size limits — so a
+wheels) are **not** committed - they'd blow past GitHub's size limits - so a
 one-time `fetch-deps.sh` downloads them into the build tree first. After that the
 build is fully reproducible. (Caveat: Arch is rolling, so a rebuild next month
-pulls today's package versions — same recipe, current packages. The AI model is
+pulls today's package versions - same recipe, current packages. The AI model is
 pinned by tag, so it's identical.)
 
 ### Prerequisites
@@ -91,9 +91,9 @@ You also need internet and `sudo` for the build.
 bash scripts/fetch-deps.sh
 ```
 Downloads and bakes into the build tree:
-- **qwen2.5:1.5b** (~1 GB) — the local AI model, pulled via Ollama into the ISO's
+- **qwen2.5:1.5b** (~1 GB) - the local AI model, pulled via Ollama into the ISO's
   Ollama store so the installed system runs the AI fully offline
-- **Whisper base** (~140 MB) — offline speech-to-text for push-to-talk
+- **Whisper base** (~140 MB) - offline speech-to-text for push-to-talk
 - pip wheels (anthropic, openai) for the optional cloud backends
 
 ### 2. Build the ISO
@@ -132,7 +132,7 @@ qemu-system-x86_64 -enable-kvm -m 4G -smp 4 \
 
   > yes
 
-  [ installation runs — live log visible in bottom pane ]
+  [ installation runs - live log visible in bottom pane ]
 
   "Done. Remove the USB and reboot. Your AI is waiting."
 
@@ -204,7 +204,7 @@ archspeech/
 ## Roadmap
 
 - [x] Offline voice in (Whisper STT, push-to-talk on Caps Lock)
-- [x] Install "on rails" — experience presets the AI triggers
+- [x] Install "on rails" - experience presets the AI triggers
 - [ ] Post-install Phase 2: AI guides WiFi + upgrade to a bigger/cloud model
 - [ ] Spoken responses (TTS) for the AI's replies
 - [ ] Graphical installer option
@@ -214,7 +214,7 @@ archspeech/
 
 ## Contributing
 
-Pull requests welcome. If you build a new install profile, fix a boot issue, or improve the AI prompting — open a PR.
+Pull requests welcome. If you build a new install profile, fix a boot issue, or improve the AI prompting - open a PR.
 
 ---
 

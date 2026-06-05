@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AIos Benchmark — tests qwen2.5:1.5b with GPU and CPU-only modes
+# AIos Benchmark - tests qwen2.5:1.5b with GPU and CPU-only modes
 set -euo pipefail
 
 PROJECT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,9 +18,9 @@ warn(){ echo -e "  ${YELLOW}⚠${RESET} $1"; }
 log() { echo "$1" | tee -a "$RESULTS"; }
 
 # ── Header ────────────────────────────────────────────────────────────────────
-print_header "AIos Benchmark — $MODEL_NAME"
+print_header "AIos Benchmark - $MODEL_NAME"
 echo "" > "$RESULTS"
-log "AIos Benchmark — $(date)"
+log "AIos Benchmark - $(date)"
 log "Machine: $(uname -n)"
 log "CPU: $(grep 'model name' /proc/cpuinfo | head -1 | cut -d: -f2 | xargs)"
 log "Cores: $(nproc)"
@@ -66,7 +66,7 @@ run_test() {
     [[ "$pl" =~ systemctl|service|enable ]]      && cheat+="$(cat "$CHEATSHEET_DIR/services.md" 2>/dev/null)"$'\n'  || true
     [[ "$pl" =~ disk|space|storage ]]            && cheat+="$(cat "$CHEATSHEET_DIR/install.md" 2>/dev/null)"$'\n'   || true
 
-    # Use Python to build the JSON safely — cheat sheet content has quotes/newlines
+    # Use Python to build the JSON safely - cheat sheet content has quotes/newlines
     local full_prompt="$prompt"
     [ -n "$cheat" ] && full_prompt="$prompt
 

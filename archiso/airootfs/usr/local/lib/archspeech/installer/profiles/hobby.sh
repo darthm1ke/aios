@@ -11,7 +11,7 @@ DESKTOP_PACKAGES="gnome gnome-extra gdm firefox vlc gimp libreoffice-fresh"
 DEV_PACKAGES="code docker docker-compose nodejs npm python python-pip rustup go"
 ARCHAI_PACKAGES="espeak-ng tmux keyd alsa-utils pipewire pipewire-pulse wireplumber"
 
-log_info "Hobby profile — GNOME + media + dev tools + a bit of everything"
+log_info "Hobby profile - GNOME + media + dev tools + a bit of everything"
 log_progress 0 "Starting hobby machine installation"
 
 parted -s "$DISK" mklabel gpt \

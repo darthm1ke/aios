@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AIos UI — tmux with AI terminal (top) and status pane (bottom)
+# AIos UI - tmux with AI terminal (top) and status pane (bottom)
 
 SESSION="aios"
 
@@ -16,10 +16,10 @@ tmux set-option -t "$SESSION" pane-active-border-style "fg=colour39"
 # Split 75/25
 tmux split-window -t "$SESSION" -v -p 25
 
-# Bottom pane — proper script file, no inline code
+# Bottom pane - proper script file, no inline code
 tmux send-keys -t "$SESSION:0.1" "/usr/local/bin/aios-status" Enter
 
-# Top pane — AI terminal
+# Top pane - AI terminal
 tmux select-pane -t "$SESSION:0.0"
 tmux send-keys -t "$SESSION:0.0" "/usr/local/bin/archspeech-live" Enter
 

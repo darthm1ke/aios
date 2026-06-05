@@ -26,7 +26,7 @@ BANNER = """
 ╚══════════════════════════════════════════════════════════════╝
 
   I can install the OS, manage packages, configure web servers,
-  set up SSL, create scripts — anything you'd normally need the
+  set up SSL, create scripts - anything you'd normally need the
   command line for. Just talk to me.
 
   First, let's connect your AI provider.
@@ -36,7 +36,7 @@ PROVIDERS = [
     {
         "key":      "anthropic",
         "label":    "Claude (Anthropic)",
-        "note":     "Recommended — best reasoning and tool use",
+        "note":     "Recommended - best reasoning and tool use",
         "needs_key": True,
         "key_hint": "starts with sk-ant-",
         "key_url":  "https://console.anthropic.com",
@@ -56,7 +56,7 @@ PROVIDERS = [
     {
         "key":      "ollama",
         "label":    "Ollama (local)",
-        "note":     "No internet needed — runs models on this machine",
+        "note":     "No internet needed - runs models on this machine",
         "needs_key": False,
         "default_model": "llama3.1",
         "api_url":  "http://localhost:11434/v1"
@@ -64,7 +64,7 @@ PROVIDERS = [
     {
         "key":      "lmstudio",
         "label":    "LM Studio (local)",
-        "note":     "No internet needed — connects to your LM Studio server",
+        "note":     "No internet needed - connects to your LM Studio server",
         "needs_key": False,
         "default_model": "local-model",
         "api_url":  "http://localhost:1234/v1"
@@ -92,7 +92,7 @@ def print_banner():
 def choose_provider() -> dict:
     print("  Which AI provider would you like to use?\n")
     for i, p in enumerate(PROVIDERS, 1):
-        print(f"  {i}) {p['label']:<28} — {p['note']}")
+        print(f"  {i}) {p['label']:<28} - {p['note']}")
     print()
 
     while True:
@@ -171,7 +171,7 @@ async def greet_and_handoff():
         "The user has just completed first-time setup of ArchSpeech. "
         "Greet them warmly and briefly. Tell them you can install the OS to disk "
         "right now, or help with anything else. Ask what they'd like to do. "
-        "Keep it to 3-4 sentences — it may be read aloud."
+        "Keep it to 3-4 sentences - it may be read aloud."
     )
     print(f"  AI: {response}\n")
 

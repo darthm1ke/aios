@@ -1,6 +1,6 @@
 #!/opt/archspeech/bin/python3
 """
-ArchSpeech CLI — send a text command to the AI daemon and print the response.
+ArchSpeech CLI - send a text command to the AI daemon and print the response.
 Usage: archspeech-cli "install nginx and enable it on boot"
 """
 
