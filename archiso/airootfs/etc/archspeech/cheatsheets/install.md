@@ -1,30 +1,30 @@
-# Installing AIos to the user's drive
+# Installing AIos — "on rails"
 
-DO NOT hand-write partition/pacstrap commands — they are dangerous and easy to
-get wrong. Use the vetted installer `aios-install`. Your job is to gather 3
-choices from the user, show them the PLAN, then run it. Internet is required
-(see networking.md — get online first).
+You do NOT write install commands. You pick an EXPERIENCE that matches what the
+user wants, plus their disk, and trigger the vetted installer. Internet is
+required first (see networking.md).
+
+## The experiences (rails) — match the user's words to ONE:
+# desktop    — normal computer: GNOME, browser, media, office. ("just a desktop", "for my mom", "browse and email")
+# gaming     — KDE + Steam, Lutris, Wine, GameMode, GPU drivers. ("gaming", "play games", "steam")
+# server     — NO desktop: SSH, Docker, nginx, firewall. ("server", "headless", "host a website", "no UI")
+# developer  — KDE + VS Code, Docker, Node, Python, Rust, Go. ("coding", "development", "programming")
+# pentest    — XFCE + nmap, wireshark, aircrack-ng, john, sqlmap. ("hacking", "security", "pentest")
 
 ## Step 1 — list the drives so the user can choose
 lsblk -dno NAME,SIZE,MODEL
 
-## Step 2 — gather 3 choices from the user
-# 1. target disk     e.g. /dev/sda  or  /dev/nvme0n1
-# 2. mode            wipe       = erase the whole disk (simplest)
-#                    alongside  = keep the existing OS, install in free space (dual-boot)
-# 3. desktop         gnome (Wayland) | kde (Wayland) | xfce (X11, light) | minimal (no desktop)
+## Step 2 — show the PLAN (safe, changes nothing). Pick experience + disk + mode:
+#   mode = wipe (erase the whole disk) OR alongside (keep their other OS)
+aios-install --experience desktop --disk /dev/sda --mode wipe
 
-## Step 3 — ALWAYS show the plan first (safe, changes nothing):
-aios-install --disk /dev/sda --mode wipe --desktop gnome
-
-## Step 4 — only after the user confirms, add --yes to actually do it:
-aios-install --disk /dev/sda --mode wipe --desktop gnome --yes
+## Step 3 — ONLY after the user confirms, add --yes to actually install:
+aios-install --experience desktop --disk /dev/sda --mode wipe --yes
 
 ## Notes
-# - "wipe" ERASES everything on that disk. Make the user confirm the disk first
-#   (match the size/model from lsblk to the drive they mean).
-# - "alongside" needs unallocated free space on the disk. If there is none,
-#   tell the user to shrink their existing OS partition first, then retry.
-# - The installer copies the AIos AI core (model included) onto the new system,
-#   so the AI still works there with no internet.
+# - Each experience already includes the right desktop, apps, and drivers — you
+#   do NOT add packages or pick a desktop. Just choose the experience.
+# - "wipe" ERASES that disk — confirm the disk matches the size/model the user means.
+# - "alongside" needs free unallocated space; if none, tell them to shrink their
+#   other OS first.
 # - After it finishes, tell the user to reboot and remove the USB.
