@@ -37,7 +37,7 @@ mkdir -p "$OUT"
 # ── Build ─────────────────────────────────────────────────────────────────────
 echo "▶ Building AIos ISO..."
 echo "  Packages cached in:  $PROJECT/pkg-cache/"
-echo "  Model:               qwen2.5:0.5b (baked into Ollama store)"
+echo "  Model:               qwen2.5:1.5b (baked into Ollama store)"
 echo ""
 
 sudo mkarchiso -v -w "$WORK" -o "$OUT" "$PROFILE"

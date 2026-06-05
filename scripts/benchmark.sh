@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# AIos Benchmark — tests qwen2.5:0.5b with GPU and CPU-only modes
+# AIos Benchmark — tests qwen2.5:1.5b with GPU and CPU-only modes
 set -euo pipefail
 
 PROJECT="$(cd "$(dirname "$0")/.." && pwd)"
-MODEL_NAME="qwen2.5:0.5b"
+MODEL_NAME="qwen2.5:1.5b"
 OLLAMA_URL="http://localhost:11434"
 RESULTS="$PROJECT/benchmark-results.txt"
 
@@ -42,12 +42,12 @@ ok "Ollama $(curl -sf "$OLLAMA_URL/api/version" | python3 -c "import sys,json; p
 
 # ── Model check ───────────────────────────────────────────────────────────────
 print_header "Model"
-if ollama list 2>/dev/null | grep -q "qwen2.5:0.5b"; then
+if ollama list 2>/dev/null | grep -q "qwen2.5:1.5b"; then
     ok "$MODEL_NAME ready"
     log "Model: $MODEL_NAME (already available)"
 else
     info "Pulling $MODEL_NAME..."
-    ollama pull qwen2.5:0.5b
+    ollama pull qwen2.5:1.5b
     ok "$MODEL_NAME pulled"
     log "Model: $MODEL_NAME (freshly pulled)"
 fi

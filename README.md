@@ -36,19 +36,24 @@ The AI daemon connects to your preferred provider and has scoped `sudo` access t
 - Network configuration
 - File management in system paths
 
-### Always-on local fallback
-TinyLlama 1.1B runs locally, always, with no internet required. If your cloud API fails, your token runs out, or you're offline — the local model takes over silently. You never lose control of your system.
+### Always-on local AI, fully offline
+**qwen2.5:1.5b** runs locally on CPU, baked into the ISO — no internet, no GPU, no
+API key. It loads at boot and stays resident, so it answers instantly. It's the
+AI from the very first second you boot the USB, before you've connected to
+anything. (CPU-only on purpose: GPU backends produced corrupted output on some
+hardware — deterministic CPU inference works on any machine.)
 
-### Guided installer with install profiles
-Boot the ISO and the AI greets you immediately — no API key required, TinyLlama handles setup. Choose your profile:
+### Install "on rails"
+Boot the ISO, the AI greets you, helps you get online, then installs your chosen
+**experience** — you just say which one, and a vetted recipe does the rest:
 
-| Profile | What you get |
+| Experience | What you get |
 |---|---|
-| 🎮 **Gaming rig** | KDE + Steam + Proton + GameMode — ditch Windows for good |
-| 🖥️ **Home server** | nginx + Docker + SSL + hardened SSH — own your data |
-| 🧰 **Hobby machine** | GNOME + dev tools + media — a bit of everything |
-| 🔒 **Pentesting lab** | XFCE + Metasploit + Wireshark + Tor — built like a pro |
-| 💻 **Dev workstation** | KDE + VS Code + Docker + full language stack |
+| 🖥️ **desktop** | GNOME (Wayland) + Firefox + media + office — a normal computer |
+| 🎮 **gaming** | KDE + Steam + Lutris + Wine + GameMode + auto-detected GPU driver |
+| 🗄️ **server** | No desktop — SSH + Docker + nginx + firewall, headless |
+| 💻 **developer** | KDE + VS Code + Docker + Node/Python/Rust/Go |
+| 🔒 **pentest** | XFCE + nmap + Wireshark + aircrack-ng + john + sqlmap |
 
 ### Live execution log
 A split tmux interface shows what the AI is executing in real time — no black box, no guessing. Works in pure TTY, no desktop required.
@@ -61,34 +66,53 @@ A split tmux interface shows what the AI is executing in real time — no black 
 | **Ollama** | Local models, no internet |
 | **LM Studio** | Local via LM Studio server |
 | **Custom endpoint** | Any OpenAI-compatible API |
-| **TinyLlama 1.1B** | Always-on fallback, baked in |
+| **qwen2.5:1.5b** | Always-on local default, baked in, runs offline on CPU |
 
 ---
 
 ## Build it yourself
 
+**Yes — anyone can clone this repo and build the exact same ISO.** The complete
+recipe is in git. The large binaries (the AI model, the speech model, pip
+wheels) are **not** committed — they'd blow past GitHub's size limits — so a
+one-time `fetch-deps.sh` downloads them into the build tree first. After that the
+build is fully reproducible. (Caveat: Arch is rolling, so a rebuild next month
+pulls today's package versions — same recipe, current packages. The AI model is
+pinned by tag, so it's identical.)
+
 ### Prerequisites
 ```bash
-sudo pacman -S archiso
+sudo pacman -S archiso ollama        # archiso builds the ISO; ollama pulls the model
 ```
+You also need internet and `sudo` for the build.
 
 ### 1. Download dependencies (once)
 ```bash
 bash scripts/fetch-deps.sh
 ```
-This downloads TinyLlama (~640MB) and pip wheels. Run once, never again.
+Downloads and bakes into the build tree:
+- **qwen2.5:1.5b** (~1 GB) — the local AI model, pulled via Ollama into the ISO's
+  Ollama store so the installed system runs the AI fully offline
+- **Whisper base** (~140 MB) — offline speech-to-text for push-to-talk
+- pip wheels (anthropic, openai) for the optional cloud backends
 
 ### 2. Build the ISO
 ```bash
 bash scripts/rebuild.sh
 ```
-Subsequent builds are fast — packages, the model, and pip wheels are all cached locally.
+Produces `build/aios-1.0.0-x86_64.iso`. Packages, model, and wheels are cached,
+so subsequent rebuilds are fast.
 
-### 3. Test in a VM
+### 3. Put it on a USB and boot it
+Copy the ISO onto a [Ventoy](https://www.ventoy.net) drive (just drag-and-drop),
+or write it directly:
+```bash
+sudo dd if=build/aios-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
+```
+Or test in a VM:
 ```bash
 qemu-system-x86_64 -enable-kvm -m 4G -smp 4 \
-  -cdrom build/archai-*.iso \
-  -boot d -vga virtio -display gtk
+  -cdrom build/aios-*.iso -boot d -vga std
 ```
 
 ---
@@ -98,9 +122,9 @@ qemu-system-x86_64 -enable-kvm -m 4G -smp 4 \
 ```
 [ Boot ISO ]
 
-  ArchAI greets you immediately via TinyLlama (no API key needed yet)
+  AIos greets you immediately via the local qwen2.5:1.5b (no API key, no internet)
 
-  "What are you building? Choose a profile or just describe it."
+  "What are you building? Tell me: desktop, gaming, server, dev, or pentest?"
 
   > gaming rig
 
@@ -133,9 +157,9 @@ qemu-system-x86_64 -enable-kvm -m 4G -smp 4 \
 ┌─────────────────────────────────────┐
 │         archspeech-daemon           │
 │  ┌─────────────┐  ┌──────────────┐  │
-│  │ Cloud AI    │  │ TinyLlama    │  │
-│  │ (Claude /   │→ │ 1.1B local   │  │
-│  │  OpenAI /   │  │ (fallback)   │  │
+│  │ Cloud AI    │  │ qwen2.5:1.5b │  │
+│  │ (Claude /   │→ │ local on CPU │  │
+│  │  OpenAI /   │  │ (default)    │  │
 │  │  Ollama)    │  └──────────────┘  │
 │  └─────────────┘                    │
 └──────────────┬──────────────────────┘
@@ -179,10 +203,11 @@ archspeech/
 
 ## Roadmap
 
-- [ ] Desktop status widget (post-install, shows AI activity)
-- [ ] Offline voice model (Whisper + Piper TTS, no espeak)
+- [x] Offline voice in (Whisper STT, push-to-talk on Caps Lock)
+- [x] Install "on rails" — experience presets the AI triggers
+- [ ] Post-install Phase 2: AI guides WiFi + upgrade to a bigger/cloud model
+- [ ] Spoken responses (TTS) for the AI's replies
 - [ ] Graphical installer option
-- [ ] AUR helper integration
 - [ ] Automatic update management via voice
 
 ---

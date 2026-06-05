@@ -2,7 +2,7 @@
 Description=AIos - Warm up the local model (offline, no network)
 # The model store is baked into the ISO at /var/lib/ollama, so there is nothing
 # to download. We just wait for the local Ollama API and fire one tiny request
-# to load qwen2.5:0.5b into RAM, so the very first voice command is instant.
+# to load qwen2.5:1.5b into RAM, so the very first voice command is instant.
 After=ollama.service
 Wants=ollama.service
 
@@ -15,9 +15,9 @@ ExecStart=/bin/bash -c '\
         curl -sf http://localhost:11434/api/version >/dev/null 2>&1 && break; \
         sleep 1; \
     done; \
-    echo "Preloading qwen2.5:0.5b into memory..."; \
+    echo "Preloading qwen2.5:1.5b into memory..."; \
     curl -sf http://localhost:11434/api/generate \
-        -d "{\\"model\\":\\"qwen2.5:0.5b\\",\\"prompt\\":\\"\\",\\"keep_alive\\":-1,\\"options\\":{\\"num_gpu\\":0}}" \
+        -d "{\\"model\\":\\"qwen2.5:1.5b\\",\\"prompt\\":\\"\\",\\"keep_alive\\":-1,\\"options\\":{\\"num_gpu\\":0}}" \
         >/dev/null 2>&1 || echo "warmup skipped (model loads on first use)"; \
     mkdir -p /var/lib/aios && touch /var/lib/aios/.model_ready; \
     echo "READY: local AI warm"'

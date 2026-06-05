@@ -313,7 +313,7 @@ def all_cheatsheets() -> str:
     return _ALL_CHEATSHEETS_CACHE
 
 
-LOCAL_MODEL = "qwen2.5:0.5b"
+LOCAL_MODEL = "qwen2.5:1.5b"
 
 
 async def handle_local(user_message: str) -> str:

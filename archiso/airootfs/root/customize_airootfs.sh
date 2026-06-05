@@ -17,7 +17,7 @@ fi
 # No llama-cpp-python — Ollama handles local inference with automatic
 # GPU detection (Vulkan, CPU). Pre-compiled, no chroot build issues.
 #
-# The qwen2.5:0.5b model store is baked into /var/lib/ollama at build time
+# The qwen2.5:1.5b model store is baked into /var/lib/ollama at build time
 # (fetch-deps.sh pulls it on the build host and copies the blob store in), so
 # the live system needs ZERO network to run the AI.
 
@@ -37,7 +37,7 @@ systemctl enable NetworkManager.service
 systemctl mask systemd-networkd-wait-online.service 2>/dev/null || true
 
 # ── Bake-in Ollama model store ownership ──────────────────────────────────────
-# The qwen2.5:0.5b store is copied into /var/lib/ollama at build time (see
+# The qwen2.5:1.5b store is copied into /var/lib/ollama at build time (see
 # fetch-deps.sh). Make sure the ollama service user can read it.
 if [ -d /var/lib/ollama ]; then
     chown -R ollama:ollama /var/lib/ollama 2>/dev/null || true

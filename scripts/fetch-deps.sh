@@ -24,8 +24,8 @@ echo ""
 # the blob store EXACTLY where the ISO expects it (/var/lib/ollama). On the
 # live system Ollama already has the model — no pull, no USB, works offline and
 # survives install-to-disk. customize_airootfs.sh chowns it to ollama at build.
-if [ -d "$OLLAMA_DIR/manifests/registry.ollama.ai/library/qwen2.5" ]; then
-    echo "✓ qwen2.5:0.5b already baked into airootfs ($(du -sh "$OLLAMA_DIR" | cut -f1))"
+if [ -f "$OLLAMA_DIR/manifests/registry.ollama.ai/library/qwen2.5/1.5b" ]; then
+    echo "✓ qwen2.5:1.5b already baked into airootfs ($(du -sh "$OLLAMA_DIR" | cut -f1))"
 else
     if ! command -v ollama >/dev/null; then
         echo "✗ ollama not installed on build host — install it: sudo pacman -S ollama"
@@ -40,11 +40,11 @@ else
         curl -sf http://localhost:11434/api/version >/dev/null 2>&1 && break
         sleep 1
     done
-    echo "▶ Pulling qwen2.5:0.5b..."
-    ollama pull qwen2.5:0.5b
+    echo "▶ Pulling qwen2.5:1.5b..."
+    ollama pull qwen2.5:1.5b
     kill $FETCH_OLLAMA_PID 2>/dev/null || true
     trap - EXIT
-    if [ ! -d "$OLLAMA_DIR/manifests/registry.ollama.ai/library/qwen2.5" ]; then
+    if [ ! -f "$OLLAMA_DIR/manifests/registry.ollama.ai/library/qwen2.5/1.5b" ]; then
         echo "✗ Pull did not land in $OLLAMA_DIR — see /tmp/aios-ollama-fetch.log"
         exit 1
     fi

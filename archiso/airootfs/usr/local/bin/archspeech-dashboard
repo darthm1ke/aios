@@ -20,7 +20,7 @@ STATUS_FILE = Path("/var/lib/aios/model_status")
 READY_FLAG  = Path("/var/lib/aios/.model_ready")
 VOICE_FIFO  = Path("/run/archspeech/voice_input")
 CHEAT_DIR   = Path("/etc/archspeech/cheatsheets")
-MODEL       = "qwen2.5:0.5b"
+MODEL       = "qwen2.5:1.5b"
 
 # ── ANSI helpers ────────────────────────────────────────────────────────────
 def bold(s):     return f"\033[1m{s}\033[0m"
