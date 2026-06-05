@@ -13,9 +13,10 @@ audio, then transcribes it on release.
 Keys: Caps Lock (keyd remaps it to F13) and Right Ctrl.
 """
 
-import asyncio, subprocess, os, sys, logging, re, wave, struct, threading, time, tempfile
+import asyncio, subprocess, os, sys, logging, re, struct, threading, time
 from pathlib import Path
 
+import numpy as np
 import evdev
 from evdev import InputDevice, ecodes
 
@@ -91,11 +92,6 @@ def audio_reader():
             log.error(f"audio reader died: {e}")
             time.sleep(1)
 
-def write_wav(path, raw):
-    with wave.open(path, "wb") as w:
-        w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE)
-        w.writeframes(raw)
-
 # ── Whisper (resident) ───────────────────────────────────────────────────────
 _WHISPER = None
 def load_whisper():
@@ -106,18 +102,17 @@ def load_whisper():
         _WHISPER = whisper.load_model(WHISPER_SIZE, download_root=WHISPER_CACHE)
         status("ready — hold Caps Lock to talk")
     except Exception as e:
-        status(f"Whisper load FAILED: {e}")
+        status(f"Whisper load FAILED: {str(e)[:70]}")
         _WHISPER = None
 
-def transcribe(wav_path):
-    if _WHISPER is None:
-        return ""
-    try:
-        r = _WHISPER.transcribe(wav_path, fp16=False, language="en")
-        return (r.get("text") or "").strip()
-    except Exception as e:
-        log.error(f"transcribe error: {e}")
-        return ""
+def transcribe(raw):
+    """Transcribe raw S16_LE mono PCM. We feed Whisper a NumPy float32 array
+    directly — NOT a WAV path — so we never invoke Whisper's file loader, which
+    shells out to ffmpeg (not installed). Fully offline, no ffmpeg dependency."""
+    raw = raw[: len(raw) // 2 * 2]                      # ensure 16-bit aligned
+    audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+    r = _WHISPER.transcribe(audio, fp16=False, language="en")
+    return (r.get("text") or "").strip()
 
 def beep(freq, ms):
     subprocess.Popen(["speaker-test", "-t", "sine", "-f", str(freq), "-l", "1", "-P", str(ms)],
@@ -162,18 +157,22 @@ async def watch(kbd):
             beep(440, 80)
             level = rms16(raw)
             if len(raw) < RATE or level < SILENCE_RMS:   # <0.5s or silent
-                status(f"silence (level {level}) — speak while holding the key")
+                status(f"silence (level {level}) — hold the key WHILE speaking")
+                continue
+            if _WHISPER is None:
+                status("Whisper not loaded — STT unavailable (see ptt.log)")
                 continue
             status(f"transcribing ({level})...")
-            wav = tempfile.mktemp(suffix=".wav", dir="/tmp")
-            write_wav(wav, raw)
-            text = transcribe(wav)
-            try: os.unlink(wav)
-            except Exception: pass
+            try:
+                text = transcribe(raw)
+            except Exception as e:
+                status(f"transcribe error: {str(e)[:70]}")
+                log.exception("transcribe failed")
+                continue
             if text:
                 status(f"heard: {text}"); to_ui(text)
             else:
-                status("transcription empty")
+                status("heard nothing clear — speak louder/closer, then retry")
 
 async def main():
     status(f"capture device {DEVICE} (card {CARD})")
