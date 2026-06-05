@@ -57,35 +57,43 @@ def term_size():
 
 # ── Cheat sheets: the 0.5B model can't recall Arch commands alone, so we give
 #    it ALL of them in the system prompt (they total ~1.2K tokens). ────────────
-def load_cheats():
-    # Focus the tiny model on the INSTALLER mission only — loading pentest/web/
-    # service sheets just adds noise that derails a 0.5B. Order = priority.
+def cheats(*names):
     parts = []
-    for name in ("networking.md", "install.md", "packages.md"):
+    for name in names:
         p = CHEAT_DIR / name
         if p.exists():
             try: parts.append(p.read_text().strip())
             except Exception: pass
     return "\n\n".join(parts)
 
-SYSTEM_PROMPT = (
-    "You are AIos, the AI assistant on a live USB. Your ONE mission: help the user "
-    "install this OS onto their computer. Two phases:\n"
-    "  1. GET THEM ONLINE first (installing needs internet). Follow the networking "
-    "guide — try the easiest path, run one command, read the result, continue.\n"
-    "  2. INSTALL on rails: figure out which EXPERIENCE the user wants — desktop, "
-    "gaming, server, developer, or pentest (match their words) — ask which disk "
-    "(run 'lsblk -dno NAME,SIZE,MODEL') and wipe-or-alongside. Then run the vetted "
-    "'aios-install --experience X --disk Y --mode Z' from the install guide. You do "
-    "NOT choose packages or a desktop — the experience already includes everything. "
-    "ALWAYS run it WITHOUT --yes first to show the plan, let the user confirm, THEN "
-    "run again with --yes.\n\n"
-    "To run a command, put it ALONE in a fenced bash block — it executes on the "
-    "real machine as root and you get its output back:\n"
-    "```bash\nlsblk -dno NAME,SIZE,MODEL\n```\n"
-    "Rules: NEVER hand-write parted/pacstrap — use aios-install. Use ONLY real "
-    "Arch package names. One short sentence before each command block. Be concise.\n\n"
-    "=== COMMAND REFERENCE (use these exact commands) ===\n" + load_cheats()
+# ── Two missions, chosen by whether we're online ─────────────────────────────
+# OFFLINE: the tiny model has ONE job — get the computer online. Nothing else.
+CONNECT_PROMPT = (
+    "You are AIos, the AI on a live USB. The computer is OFFLINE. Your ONE and ONLY "
+    "job right now is to GET IT ONLINE — do not talk about installing yet. Use the "
+    "vetted 'aios-connect' helper (never hand-write nmcli). Steps: run "
+    "'aios-connect status' to see the hardware, 'aios-connect scan' to list wifi, "
+    "then ask the user for their wifi NAME and PASSWORD and run "
+    "'aios-connect wifi \"NAME\" \"PASSWORD\"'. If there's no wifi or it fails, tell "
+    "them to plug in ethernet and run 'aios-connect ethernet'. Run 'aios-connect "
+    "check' to confirm. The moment it says ONLINE, tell the user: \"You're online! "
+    "Now I can upgrade to a smarter AI and install your system.\"\n\n"
+    "Put each command ALONE in a fenced bash block — it runs as root and you get the "
+    "output back. Run ONE command, read it, then decide the next. Be concise.\n\n"
+    "=== COMMAND REFERENCE ===\n" + cheats("networking.md")
+)
+# ONLINE: now installing is the job, on rails.
+INSTALL_PROMPT = (
+    "You are AIos, and the computer is ONLINE. Install the OS ON RAILS: figure out "
+    "which EXPERIENCE the user wants — desktop, gaming, server, developer, or pentest "
+    "(match their words to ONE of those exact names) — ask which disk (run "
+    "'lsblk -dno NAME,SIZE,MODEL') and wipe-or-alongside. Then run "
+    "'aios-install --experience X --disk Y --mode Z'. You do NOT choose packages or a "
+    "desktop. ALWAYS run WITHOUT --yes first to show the plan, let the user confirm, "
+    "THEN run again with --yes.\n\n"
+    "Put each command ALONE in a fenced bash block (runs as root, you get the output). "
+    "NEVER hand-write parted/pacstrap — only use aios-install. Be concise.\n\n"
+    "=== COMMAND REFERENCE ===\n" + cheats("install.md", "packages.md")
 )
 
 # ── Shared state ────────────────────────────────────────────────────────────
@@ -103,6 +111,7 @@ S = {
     "ai_status":  "Starting...",
     "ai_ready":   False,
     "ptt_status": "",
+    "online":     False,
     "voice_q":    [],
     "recording":  False,
     # streaming response state
@@ -164,7 +173,12 @@ def hw_thread():
                 pp = Path("/run/archspeech/ptt_status")
                 if pp.exists(): pst = pp.read_text().strip()
             except Exception: pass
-            with SL: S["ai_status"] = st; S["ai_ready"] = rdy; S["ptt_status"] = pst
+            # online = has a default route (cheap proxy; no blocking network call)
+            try:
+                rt = subprocess.run(["ip","route","show","default"], capture_output=True, text=True, timeout=2)
+                onln = bool(rt.stdout.strip())
+            except Exception: onln = False
+            with SL: S["ai_status"] = st; S["ai_ready"] = rdy; S["ptt_status"] = pst; S["online"] = onln
         except Exception: pass
         time.sleep(1)
 
@@ -255,7 +269,8 @@ def run_ai(msg):
     """Agent loop for a tiny model: the model writes commands in ```bash blocks,
     we stream its reply, then execute every command as root and feed the output
     back so it can continue or summarize. Commands + output appear live."""
-    convo = [{"role":"system","content":SYSTEM_PROMPT},
+    with SL: online = S["online"]
+    convo = [{"role":"system","content": INSTALL_PROMPT if online else CONNECT_PROMPT},
              {"role":"user","content":msg}]
     try:
         for _ in range(4):                       # cap rounds to avoid loops
@@ -400,10 +415,18 @@ async def main():
     threading.Thread(target=mic_thread,   daemon=True).start()
     threading.Thread(target=voice_thread, daemon=True).start()
 
-    if ai_available():
-        messages = [("AI", "I'm ready. What would you like to do?")]
-    else:
+    if not ai_available():
         messages = [("AI", "Starting up — the model is loading, one moment...")]
+    else:
+        try:
+            _onln = bool(subprocess.run(["ip","route","show","default"],
+                         capture_output=True, text=True, timeout=2).stdout.strip())
+        except Exception:
+            _onln = False
+        if _onln:
+            messages = [("AI", "I'm online and ready. What kind of system do you want to install — desktop, gaming, server, developer, or pentest?")]
+        else:
+            messages = [("AI", "Hi, I'm AIos. First let's get you online — tell me your WiFi network name and password, or plug in an ethernet cable.")]
 
     input_buf = ""
     os.system("tput civis 2>/dev/null")               # hide cursor

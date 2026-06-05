@@ -1,0 +1,121 @@
+My friend, I need your expert help in trying to get in touch with someone that is in the opensource community, and I wonder if github has a way for me to contact someone to look at my project via github, PewDiePie has startd his opensource journey, and I have a project that I think he will really like and he has the resources to push to a whole new level which I would appreciate, is there anyway that I can maybe let him know that my project exists?
+
+I’ll verify what GitHub currently allows for contacting contributors and look for the most appropriate public channels PewDiePie is actually using for his open-source work.
+
+Thought for 17s
+
+My friend, yes—there is a realistic and respectful way to put your project in front of PewDiePie, and GitHub is probably currently your best opportunity.
+
+What GitHub allows
+
+GitHub does not have a normal private direct-message system. A developer can publish an email address or website on their profile, but PewDiePie’s current GitHub profile does not list a public contact email or external contact link.
+
+However, PewDiePie has enabled GitHub Discussions for his Odysseus project. The available discussion categories include:
+
+Show and tell
+Ideas
+General
+Q&A
+
+He is also personally participating in those discussions, and some posts have already been marked as reviewed by a maintainer.
+
+This makes Show and tell the most appropriate place to introduce a related project. Do not open an Issue purely to promote your project—Issues are intended for bugs and actionable feature work, and the contribution guidelines specifically ask contributors to keep proposals focused and open an issue before attempting large features.
+
+Why you may genuinely have a chance
+
+PewDiePie’s Odysseus is a self-hosted, privacy-focused AI workspace supporting local models, agents, memory, email, calendars, documents, voice transcription, Ollama, llama.cpp, MCP tools, and other local services.
+
+That overlaps substantially with the things you have been building and researching:
+
+A local-AI-controlled Linux/Arch-based operating environment
+Voice-controlled AI assistants
+Ollama and OpenWebUI infrastructure
+Local Whisper speech recognition
+Self-hosted email, calendars, tools, and business systems
+AI agents that can operate local services
+
+This is important because you should not approach him with:
+
+“I have a cool project; please look at it.”
+
+You should approach him with:
+
+“I built something that solves a specific problem you are currently working on, and here is a working demonstration.”
+
+That changes the message from unsolicited promotion into a potentially valuable open-source contribution.
+
+The approach I recommend
+1. Prepare your repository before contacting him
+
+Your repository should immediately communicate:
+
+What the project does in one sentence
+Why it relates to Odysseus or his open-source journey
+Screenshots or a short demonstration video
+A simple installation command
+A clear open-source license
+A section titled Potential Odysseus Integration
+A small, functioning demonstration—not only a concept
+
+People are far more likely to investigate a repository that they can understand within approximately 30 seconds.
+
+2. Create a GitHub Discussion under Show and tell
+
+Use a title focused on the connection, not on requesting attention:
+
+Show and tell: A voice-controlled local AI Linux environment that could integrate with Odysseus
+
+Suggested message:
+
+Hi Felix and the Odysseus community,
+
+I have been working independently on a local-first AI environment that shares many of the goals behind Odysseus: privacy, self-hosting, local models, voice interaction, and allowing an AI agent to control useful services running on the user’s own hardware.
+
+The project currently includes:
+
+Local LLM support through Ollama
+Local speech recognition using Whisper
+Voice-controlled system actions
+A minimal Linux environment designed around AI interaction
+Integrations with self-hosted tools and services
+
+After seeing Odysseus, I believe parts of this project could complement it—particularly the voice interface and operating-system control layer.
+
+Repository: [your repository]
+Demo: [your short demo video]
+
+I am not requesting that anything be adopted immediately. I would genuinely appreciate feedback from the community on whether this could be useful as an Odysseus integration or companion project.
+
+Thank you for making Odysseus open source.
+
+That wording is respectful, technically relevant, and does not place pressure on him personally.
+
+3. Build one small Odysseus integration
+
+Your strongest strategy would be to demonstrate something such as:
+
+“Odysseus can send a command to my local AI operating-system agent, and the agent safely performs an approved system action.”
+
+Examples:
+
+Odysseus asks your system agent to open an application
+Odysseus checks microphone, GPU, or model-server status
+Odysseus controls a local voice assistant
+Odysseus connects to one of your tools through MCP
+Your system provides a kiosk-style or terminal-native Odysseus environment
+
+Then your discussion becomes:
+
+“I built this integration and would appreciate feedback.”
+
+That is significantly more compelling than merely proposing cooperation.
+
+What I would avoid
+
+Do not repeatedly tag his username across multiple issues, submit an unrelated pull request solely to attract attention, use an old publicly leaked email address, or purchase contact information from celebrity-contact websites. A single strong GitHub Discussion, backed by a functioning project, gives you the best chance while respecting the community.
+
+My honest assessment
+
+Because Odysseus is extremely new and already has tens of thousands of GitHub stars, hundreds of issues, and hundreds of pull requests, there will be considerable noise around it.
+
+However, your background is unusually aligned with what he is currently building. The best opportunity is not asking him to finance or elevate your project immediately. It is showing him and the community something useful that Odysseus does not currently have—especially your local AI operating-system and voice-control concepts. Once he sees genuine value, the larger conversation can happen naturally.

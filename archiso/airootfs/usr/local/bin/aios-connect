@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# aios-connect — get the machine ONLINE (triggered by the AI, like aios-install).
+# The offline model's whole job is to get connected; it just calls this with the
+# user's wifi name + password. Vetted commands, clear output the AI can read.
+#
+# Usage:
+#   aios-connect status                 # what network hardware + state exists
+#   aios-connect scan                   # list nearby wifi networks
+#   aios-connect wifi "SSID" "PASSWORD" # connect to wifi
+#   aios-connect ethernet               # bring up a wired connection
+#   aios-connect check                  # are we online? (ONLINE / OFFLINE)
+# ─────────────────────────────────────────────────────────────────────────────
+set -uo pipefail
+ACTION="${1:-status}"
+
+online() { ping -c1 -W3 archlinux.org >/dev/null 2>&1; }
+
+case "$ACTION" in
+  status)
+    echo "── Network hardware & state ──"
+    nmcli -t -f DEVICE,TYPE,STATE device status 2>/dev/null | sed 's/^/  /'
+    echo "── Wifi radio / blocks ──"
+    rfkill list 2>/dev/null | sed 's/^/  /'
+    echo "── Wifi/ethernet chips ──"
+    lspci 2>/dev/null | grep -iE 'network|ethernet' | sed 's/^/  /'
+    lsusb 2>/dev/null | grep -iE 'wireless|wlan|wifi|ethernet' | sed 's/^/  /'
+    if ! nmcli -t -f TYPE device status 2>/dev/null | grep -q '^wifi'; then
+      echo "  NOTE: no wifi device detected — use ethernet, or phone USB-tethering."
+    fi
+    online && echo ">> Already ONLINE." || echo ">> Currently OFFLINE."
+    ;;
+
+  scan)
+    rfkill unblock all 2>/dev/null || true
+    nmcli radio wifi on 2>/dev/null || true
+    sleep 1
+    echo "── Nearby wifi networks ──"
+    nmcli -f SSID,SIGNAL,SECURITY device wifi list 2>/dev/null | sed 's/^/  /' \
+      || echo "  (no wifi device / scan failed — try ethernet)"
+    ;;
+
+  wifi)
+    SSID="${2:-}"; PASS="${3:-}"
+    [ -n "$SSID" ] || { echo "ERROR: need a wifi network name"; exit 1; }
+    rfkill unblock all 2>/dev/null || true
+    nmcli radio wifi on 2>/dev/null || true
+    sleep 1
+    echo ">> Connecting to '$SSID'..."
+    if [ -n "$PASS" ]; then
+      nmcli device wifi connect "$SSID" password "$PASS"
+    else
+      nmcli device wifi connect "$SSID"
+    fi
+    sleep 2
+    online && echo ">> ✓ ONLINE — connected to $SSID" \
+           || echo ">> ✗ connected to wifi but no internet yet (wrong password? captive portal?)"
+    ;;
+
+  ethernet)
+    DEV="$(nmcli -t -f DEVICE,TYPE device status 2>/dev/null | awk -F: '$2=="ethernet"{print $1; exit}')"
+    [ -n "$DEV" ] || { echo "ERROR: no ethernet device found — plug in a cable, or use wifi"; exit 1; }
+    echo ">> Bringing up wired connection on $DEV..."
+    nmcli device connect "$DEV" 2>/dev/null || true
+    sleep 2
+    online && echo ">> ✓ ONLINE via ethernet" || echo ">> ✗ cable in? no internet yet on $DEV"
+    ;;
+
+  check)
+    if online; then echo "ONLINE"; else echo "OFFLINE"; fi
+    ;;
+
+  *)
+    echo "usage: aios-connect status|scan|wifi \"SSID\" \"PASSWORD\"|ethernet|check"
+    exit 1 ;;
+esac

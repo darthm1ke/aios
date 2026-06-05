@@ -1,41 +1,29 @@
-# Getting Online (AIos — do this FIRST, before installing)
+# Getting the computer ONLINE — your only job right now
 
-The user usually has NO internet yet. Your job: get them connected. Try the
-EASIEST path first, diagnose only if it fails. Run ONE command, read its output,
-then decide the next step.
+You do NOT hand-write nmcli. Use the vetted `aios-connect` helper. Run one step,
+read its output, decide the next. Keep it simple and friendly.
 
-## Step 1 — what network hardware exists?
-nmcli device status
-ip link show
+## Step 1 — see what network hardware exists and if we're already online
+aios-connect status
 
-## Step 2a — WiFi (most common)
-rfkill unblock all                      # undo a hardware/soft block first
-nmcli radio wifi on
-nmcli device wifi list                  # show nearby networks
-nmcli device wifi connect "SSID" password "PASSWORD"
+## Step 2a — WiFi: list networks, then connect with the user's name + password
+aios-connect scan
+aios-connect wifi "THE_NETWORK_NAME" "THE_PASSWORD"
 
-## Step 2b — Wired ethernet (most reliable — just plug in a cable)
-nmcli device connect <interface>        # e.g. enp3s0; usually auto-connects
+## Step 2b — Wired: if they have an ethernet cable plugged in
+aios-connect ethernet
 
-## Step 2c — Phone USB tethering (BEST fallback when WiFi driver is broken)
-# Plug phone in by USB, enable "USB tethering" on the phone. It appears as a
-# wired device and NetworkManager grabs it automatically:
-nmcli device status                     # look for a new ethernet/usb device
-nmcli device connect <usb-iface>
+## Step 3 — confirm we made it online
+aios-connect check
 
-## Step 3 — confirm it worked
-ping -c 2 archlinux.org
+## Reading the results
+# - "status" shows the wifi chip and whether the radio is blocked. If it says
+#   "no wifi device", tell the user to plug in an ethernet cable OR connect their
+#   phone by USB and turn on USB tethering, then run `aios-connect ethernet`.
+# - "wifi" prints "✓ ONLINE" on success, or warns if the password looks wrong.
+# - Most laptop wifi works out of the box (firmware is on this USB). Broadcom
+#   cards can't be fixed offline — fall back to ethernet / phone tethering.
 
-## DIAGNOSE — WiFi device missing or won't connect
-rfkill list                             # is it "Soft blocked: yes"? -> rfkill unblock all
-lspci -k | grep -A3 -i network          # which WiFi chip + is a driver bound?
-lsusb                                    # USB WiFi dongles show here
-dmesg | grep -iE "firmware|wifi|iwlwifi|ath|rtw" | tail -20   # missing firmware?
-
-## Driver reality check (NO internet = can't download drivers)
-# linux-firmware (Intel/Atheros/Realtek/MediaTek) is already on this USB, so most
-# laptop WiFi works after `rfkill unblock all`. Broadcom (broadcom-wl) does NOT
-# ship firmware and CANNOT be fixed offline — for those, tell the user to use
-# ETHERNET or PHONE USB TETHERING (step 2b/2c). That always works.
-
-## Once online, hand back to install.md to install the OS.
+## Once `aios-connect check` says ONLINE
+# Tell the user: "Great, you're online! Now I can upgrade to a smarter AI and
+# install your system." Getting online is the whole goal at this stage.
